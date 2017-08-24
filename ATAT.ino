@@ -31,6 +31,8 @@
 // Include some libraries we need :) 
 #include <SoftPWM.h>          // Software PWM due to too few analog write pins
 #include <wavTrigger.h>       // For controlling the WAV Trigger via serial
+#include <Wire.h>
+#include "Adafruit_TPA2016.h"
 
 // Defining up the pins we will be using :)
 // Pins used for I2C: A4/A5/8
@@ -93,12 +95,13 @@ byte fired = 0;       // Used to ensure we enter the Snowspeeder firing sequence
 
 // The WAV Trigger object
 wavTrigger wTrig;
+Adafruit_TPA2016 audioamp = Adafruit_TPA2016();
 
 // Rotary Encoder, pressing the rotary encoder button = pause/unpause, rotating changes the volume
 static uint8_t enc_prev_pos   = 0;  // These were copied directly from Adafruit's example
 static uint8_t enc_flags      = 0;  // These were copied directly from Adafruit's example
 static char    sw_was_pressed = 0;  // These were copied directly from Adafruit's example
-int volumeGain = -8;                // This is the default setting of dB from which we always start
+int volumeGain = -20;                // This is the default setting of dB from which we always start
 int volumeGain_old = 0;             // Used to store the old volume setting when pausing so 
                                     // we know where to return to when unpausing
 bool paused = false;                // Pause if true, unpause if false
@@ -139,6 +142,8 @@ void setup() {
   wTrig.stopAllTracks();      // Just in case..we want to start with a clean slate
   wTrig.samplerateOffset(0);  // Same here, reset any offset (speed/pitch). 
                               // I guess this is good practice, though I will not use the function
+  //wTrig.setAmpPwr(1);
+  audioamp.begin();
 }
 
 void loop() {
@@ -233,11 +238,11 @@ void loop() {
                                                     // now it causes some level of "halt" when maniuplating the volume
         } 
         //digitalWrite(ampShutdown, LOW);           // Used to send shutdown signal to a SD pin on the amplifier. Will use I2C instead.
-                                                    // Waiting for the new I2C enable amp to arrive. 
+        audioamp.enableChannel(false, false);       // Turn off both channels using I2C
         paused = true;                              // We are now paused.. 
       }else if (paused == true){                    // We were paused, but the button was pressed..start unapusing, get the show on the road!
         //digitalWrite(ampShutdown, HIGH);          // Used to send shutdown signal to a SD pin on the amplifier. Will use I2C instead.
-                                                    // Waiting for the new I2C enable amp to arrive.      
+        audioamp.enableChannel(true, true);       // Turn on both channels using I2C      
         for (int i=-70; i <= volumeGain_old; i++){  // Increase the volume back to the old setting  
           wTrig.masterGain(i);                      // Set the master gain
           delay(10);                                // Swap this with millis() function, see above
@@ -264,7 +269,7 @@ void loop() {
   if (paused == false){ // false = not paused
 
     // START - Code only executed the very first time through the loop
-    if (started == false){              // If this is the first time then started = false
+    if (started == false){                          // If this is the first time then started = false
       analogWrite(atatCockpit, 15);     // Light the ATAT cockpit
       //wTrig.stopAllTracks();          // Was used for a period when I tried to halt the sequence.
                                         // Will keep this in case I find I want to add an on/off feature..
@@ -278,85 +283,145 @@ void loop() {
                                         // Must keep in mind that we can only play 8 tracks at any given time.. 
       started = true;                   // Set this to true so we never enter this part of the program again, 
                                         // unless there is a power cycle.
+
+      // Stereo Amplifier commands (I2C)
+      audioamp.enableChannel(true, true);           // Turn on the amplifier, both channels (I2C)
+      audioamp.setGain(0);                          // Set the initial gain to 0. Must make a decision 
+                                                    // to either use the amp or the wav trigger for volume adjustment
+      //audioamp.setLimitLevelOn();                 // For testing
+      //audioamp.setLimitLevel(13);                 // For testing
+      //audioamp.setAGCCompression(TPA2016_AGC_4);  // For testing
+      audioamp.setAGCCompression(TPA2016_AGC_OFF);  // For testing, currently the AGC is off and seems to be what I wanted
+      //audioamp.setAttackControl(1);               // For testing
+      //audioamp.setHoldControl(1);                 // For testing
+      //audioamp.setReleaseControl(5);              // For testing
+ 
     }
     // END - Code only executed the very first time through the loop
 
     // START - Random generators
-    if (rndmATATShot == false){
-      rndmATATShotMillis = random(1500, 4000); // Pseudo random, will do the trick for this
-      rndmATATShot = true;
+    if (rndmATATShot == false){                     // Basically check if new random timer should be calculated
+      rndmATATShotMillis = random(1500, 4000);      // Pseudo random, will do the trick for this
+                                                    // Actually it has turned out to be a good thing for troubleshooting
+                                                    // ATAT Shots should occur every 1.5 - 4 seconds
+      rndmATATShot = true;                          // New timer calculated, don't do it again until told to
     }
     if (rndmATATShotSpacer == false){
-      rndmATATSpacerMillis = random(100, 200); // Pseudo random, will do the trick for this
+      rndmATATSpacerMillis = random(100, 200);      // The ATAT shots should be spaced by 100-200 ms
       rndmATATShotSpacer = true;
     }
     if (rndmATATExplosion == false){
       explodeOrNot = random(1,11);
-      rndmATATExplosionMillis = random(500, 1000); // Pseudo random, will do the trick for this
+      rndmATATExplosionMillis = random(500, 1000);  // The ATAT HLC should "hit" every 0.5 and 1 second after the second
+                                                    // HLC has fired
       rndmATATExplosion = true;
     }
   
     if (rndmSpeederFlight == false){
-      oneOrTwo = random(10,15);
-      shootOrNot = random(15,20);
-      numberOfShots = random(1,4);                  // a number from 1 to and including 3
-      rnmdSpeederShotSpacerMillis = random(100,200); // Time between first two salvos
-      rndmSpeederMillis = random(1000, 5000);       // Pseudo random, will do the trick for this
+      oneOrTwo = random(10,15);                       // Should the snowspeeder flight be a one of two ship formation?
+      shootOrNot = random(15,20);                     // Should they fire or not?
+      numberOfShots = random(1,4);                    // How many shots? From 1 to and including 3
+      rnmdSpeederShotSpacerMillis = random(100,200);  // Time between first two salvos
+      rndmSpeederMillis = random(1000, 5000);         // The snowspeeder flight interval
       rndmSpeederFlight = true;
     }
     if (rndmSpeederSpacer == false){
-      rndmSpeederSpacerMillis = random(500, 1000);    // Pseudo random, will do the trick for this
+      rndmSpeederSpacerMillis = random(500, 1000);    // The time between the snowspeeders in each flight. From 0.5 to 1 second apart.
       rndmSpeederSpacer = true;
     }
     if (rndmSpeederShot == false){
-      rndmSpeederShotMillis = random(30, 60);         // Pseudo random, will do the trick for this
+      rndmSpeederShotMillis = random(30, 60);         // The time between each snowspeeder shot, from 30 to 60 ms. 
       rndmSpeederShot = true;
     }
     // END - Random generators
 
-    //unsigned long currentMillis = millis();   // Pretty sure this is redundant..
-
+    /* I have decided to do the ATAT and Snowspeeders as separate entities that exist in code independent of each other. Multitasking. 
+    * This is where the "animation" takes place, timing all the events etc. 
+    * This relies heavily on the use of millis() to know where in time the code is, and to trigger events at given (random) intervals. 
+    * The theory is this: millis() counts milliseconds from the time the micro controller was powered up. This number is ever increasing and 
+    * to point to any given millisecond we use "unsigned long"; a 32 bit number with no negative component: 0 to 4,294,967,295 (2^32 - 1). 
+    * There are 3.6 million milliseconds pr hour..this number will allow the Trinket to run for approx 1193 hours, or almost 50 days, before rolling over.
+    * I will never leave my diorama on for that long, so I am not even going to bother with dealing with a rollover in this code. 
+    * 
+    * Anyway, if time X has passed since power on, and we want Z to happen at time Y we must check what the time is, and if time Y has passed yet. 
+    * I have created a variable called currentMillis that I use for this purpose, and at first "glance" the pseudo code could be this: 
+    * If currentMillis is bigger or equal to Y, then do Z 
+    * 
+    * However this means we will do Z over and over and over and over again as the code loops through after we pass time Y the first time. 
+    * In other words; The if statement will forever be true after time Y
+    * 
+    * To counter this and to make it happen at time Y intervals instead, we must add more math. 
+    * In fact we must also add a new variable to store the time we last performed Z: i.e. previousMillis
+    * 
+    * The new pseudo code becomes:
+    * if currentMillis minus previousMillis is greater than or equal to Y, then do Z
+    * 
+    * This means that as the code starts to run previousMillis will be 0. We have not stored a new time yet. This means
+    * that after currentMillis is greater than or equal to time Y, Z happens. We store time Y as previousMillis. 
+    * Then as the code loops we are faced with this math statement: currentMillis minus previousMillis, this will be less than time Y until the 
+    * interval has once again passed. After which, we store a new time in previousMillis and so on and so on. 
+    * 
+    * I had a hard time getting my head around this simple concept. Once I did it was easy to link events using the previousMillis idea. 
+    * So in my code I maintain only two of these variables. One for the ATATs and one for the Snowspeeders. If one knows about this, and listens 
+    * carefully you can hear the sequence of things:
+    * The ATAT fires twice, then an explosion occurs. The snowspeeders passes and fires. To mix things up I have added randomizers to maybe there is
+    * an explosion or not after the ATAT is done. Maybe there are two snowspeeders, maybe they never fire, or they fire a random number of times. 
+    *
+    * In addition, I don't want things to happen BEFORE I am ready, or rather. I want to make things a bit random. So when the ATAT has fired, it
+    * should not fire again until a new time Y has been calculated. Thus I use a second IF statment to control the workflow. 
+    */
+    
     // START - AT AT Firing + Explosion 
-    if(ATATShot1 == false){
-      if (currentMillis - previousATATShotMillis >= rndmATATShotMillis) {  // Basically means every rndmATATShotMillis this will happen. 
-        previousATATShotMillis = currentMillis;
-        wTrig.trackPlayPoly(4);
-        SoftPWMSet(hlc0, 120);
-        ATATShot1 = true;
+    if(ATATShot1 == false){                                                 // Do not confuse this with the randomizer variables. 
+                                                                            // This is used to control the flow. If the first HLC has fired
+                                                                            // then we should not return here yet..the full "ATAT sequence" must finish first..
+      if (currentMillis - previousATATShotMillis >= rndmATATShotMillis) {   // Basically means we wait rndmATATShotMillis before the HLC fires..
+        previousATATShotMillis = currentMillis;                             // Storing the time this happened last, so that the next will happen
+                                                                            // rndmATATShotMillis after this point in time. 
+        wTrig.trackPlayPoly(4);                                             // Play track 4, the single ATAT laser sound
+        SoftPWMSet(hlc0, 120);                                              // Light up LED on pin hcl0 to a value of 120
+        ATATShot1 = true;                                                   // We have fired the first HLC..now to fire the next.. 
       }
     }
-    if (currentMillis - previousATATShotMillis >= ATATShotLength) SoftPWMSet(hlc0, 0);
-    if (ATATShot1 == true && ATATShot2 == false){
-      if (currentMillis - previousATATShotMillis >= rndmATATSpacerMillis) {  // Basically means every rndmATATShotMillis this will happen. 
-        previousATATShotMillis = currentMillis;   
-        wTrig.trackPlayPoly(4);
+    if (currentMillis - previousATATShotMillis >= ATATShotLength) SoftPWMSet(hlc0, 0);  // The HLC LED must be turned off, and this should happen fairly fast
+                                                                                        // after it was lit. ATATShotLength is set to 20ms
+                                                                                        // Here we see previousATATShotMilis still being used as a time ref for 
+                                                                                        // the ATAT sequence. No point in storing this time. If the HLCs fire almost
+                                                                                        // on top of each other that's "fine"
+    if (ATATShot1 == true && ATATShot2 == false){                             // If we have fired the first, but not the second HLC, then do this
+      if (currentMillis - previousATATShotMillis >= rndmATATSpacerMillis) {   // Basically means we still have to wait rndmATATSpacerMillis amount of time before doing this. 
+        previousATATShotMillis = currentMillis;                               // Storing the time we did this
+        wTrig.trackPlayPoly(4);                                               
         SoftPWMSet(hlc1, 120);  
-        ATATShot2 = true;
-      } 
+        ATATShot2 = true;                                                     // We're done firing the second HLC..moving on
+      }   
     }
-    if (currentMillis - previousATATShotMillis >= ATATShotLength) SoftPWMSet(hlc1, 0);
-    if ((ATATShot1 == true) && (ATATShot2 == true)){ 
-      if (currentMillis - previousATATShotMillis >= rndmATATExplosionMillis) {  // Basically means every rndmATATShotMillis this will happen. 
-        if (explodeOrNot > 4){ // Above 4 = explode
-          previousATATShotMillis = currentMillis;  
+    if (currentMillis - previousATATShotMillis >= ATATShotLength) SoftPWMSet(hlc1, 0);  // Turn off the second HLCs LED after 20ms
+    
+    if ((ATATShot1 == true) && (ATATShot2 == true)){                            // Now that we are done firing, we can move to the explosion bit
+      if (currentMillis - previousATATShotMillis >= rndmATATExplosionMillis) {  // Basically means we wait rndmATATExplosionMillis for this bit. 
+        if (explodeOrNot > 4){                                                  // A way to weight the randomness..if the value of exlodeOrNot is 
+                                                                                // greater than 4 we get an explosion! 
+          previousATATShotMillis = currentMillis;                               // Storing time.. 
           // Explosions = Files 9 - 13
-          int x = random(9,14);
+          int x = random(9,14);                                                 // Random audio file to play in place of the explosion
           wTrig.trackPlayPoly(x);
-          SoftPWMSet(explosion, 200);  
+          SoftPWMSet(explosion, 200);                                           // Light the explosion LED to a value of 200
         }
-        rndmATATShot = false;
-        rndmATATExplosion = false;
+        rndmATATShot = false;                                                   // Return a bunch of values set to true during the sequence back to false
+        rndmATATExplosion = false;                                              // to start the ATAT sequence over. 
         rndmATATShotSpacer = false;
         ATATShot1 = false;      
         ATATShot2 = false;
       }
     }
-    if (currentMillis - previousATATShotMillis >= ATATShotLength) SoftPWMSet(explosion, 0);
+    if (currentMillis - previousATATShotMillis >= ATATShotLength) SoftPWMSet(explosion, 0); // Kill the explosion LED. The fade is set elsewhere so turning it off after
+                                                                                            // 20 ms is fine
     // END - AT AT Firing + Explosion
 
     // START - Speeder flying and firing
     if(speeder1 == false){
-      if (currentMillis - previousSpeederMillis >= rndmSpeederMillis) {  // Basically means every rndmSpeederMillis this will happen. 
+      if (currentMillis - previousSpeederMillis >= rndmSpeederMillis) {  
         previousSpeederMillis = currentMillis; 
         // Snowspeeder flyby = Files 4 - 7
         int y = random (5,8); 
@@ -414,7 +479,7 @@ void loop() {
       }
     }
     // END - Speeder flying and firing
-  }else if (paused == true) {
+  }else if (paused == true) {           // If we are paused, go here.. 
     // do nothing..we are holding.. 
   }
 }
