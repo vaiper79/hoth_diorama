@@ -12,6 +12,7 @@
  * - No delay: https://www.baldengineer.com/fading-led-analogwrite-millis-example.html
  * - Rotary encoder: https://learn.adafruit.com/trinket-usb-volume-knob/code
  * - Odd/Even: http://forum.arduino.cc/index.php?topic=41397.0
+ * - IR Sensor: https://github.com/adafruit/Adafruit-NEC-remote-control-library
  * 
  * Datasheets: 
  * - Rotary encoder: https://cdn-shop.adafruit.com/datasheets/pec11.pdf
@@ -25,14 +26,31 @@
  * - Stereo Amplifier: https://learn.adafruit.com/adafruit-tpa2016-2-8w-agc-stereo-audio-amplifier
  * - WAV Trigger Guide#1: https://learn.sparkfun.com/tutorials/wav-trigger-hookup-guide
  * - WAV Trigger Guide#2: http://robertsonics.com/wav-trigger-online-user-guide/
+ * - IR Sensor: https://learn.adafruit.com/ir-sensor/overview
+ *              http://z3t0.github.io/Arduino-IRremote/  <-- THIS!
  * 
+ * Acknowledgements:
+ * - IR sensor code: Ken Shirriff (http://arcfn.com & http://z3t0.github.io/Arduino-IRremote/), TRULY a lifesaver!
+ *                    (I had to swap to timer 1 in boarddefs.h due to a conflict with the SoftPWM library)
+ *                    
+ * Parts list:
+ *  1x IR Sensor: http://www.adafruit.com/products/157
+ *  1x Remote control: http://www.adafruit.com/products/389
+ *  1x WAV Trigger:
+ *  1x Pro Trinket 5V:
+ *  1x Stereo amplifier:
+ *  2x Speakers:
+ *  1x Rotary encoder:
+ *  LEDs: 
+ *  Resistors and wires
  */
 
 // Include some libraries we need :) 
 #include <SoftPWM.h>          // Software PWM due to too few analog write pins
 #include <wavTrigger.h>       // For controlling the WAV Trigger via serial
-#include <Wire.h>
-#include "Adafruit_TPA2016.h"
+//#include <Wire.h>           // Used for I2C communications
+#include "Adafruit_TPA2016.h" // Used for the I2C controlled stereo amplifier
+#include <IRremote.h>         // Used for the IR sensor function
 
 // Defining up the pins we will be using :)
 // Pins used for I2C: A4/A5/8
@@ -44,12 +62,14 @@
 #define hlc0 A2                   // Soft PWM if necessary, left HLC
 #define hlc1 A3                   // Soft PWM if necessary, right HLC
 #define explosion A1              // Soft PWM, explosion on ground
+#define RECV_PIN 12               // IR Sensor pin
 #define selectorSwitch 4          // State control button switch, was 8..but changed to 4 due to quicker read (PIND)
 #define selectorUp 3              // SelectorUp
 #define selectorDn 5              // SelectorDown
 #define selectorPin PIND          // https://www.arduino.cc/en/Reference/PortManipulation 
                                   // Baiscally this means I must use the pins in the 0-7 range to use PIND.
                                   // This is all because reading the pins takes longer than direct port access. 
+
 
 // To make the diorama more dynamic, I will use pseudo randomization. These
 // variables are meant to tell when to create new randoms. Basically on every run. 
@@ -60,6 +80,7 @@ bool rndmSpeederFlight = false;     // false if no random timer set, true when w
 bool rndmSpeederSpacer = false;     // false if no random timer set, true when waiting to execute
 bool rndmSpeederShot = false;       // false if no random timer set, true when waiting to execute
 bool rndmSpeederShotSpacer = false; // false if no random timer set, true when waiting to execute
+bool doVoiceOrNot = false;          // False if we aren't supposed to talk.. 
 
 // Variables used to ensure the proper flow of the sequence. When set true, the sequence will 
 // always move on to the next step. 
@@ -93,15 +114,23 @@ byte numberOfShots;   // How many speeder laser shots
 byte speederShot = 0; // Count what shot we are at      
 byte fired = 0;       // Used to ensure we enter the Snowspeeder firing sequence correctly
 
+String hexRes = "000000"; // I decided to go for the value returned by the IR sensor, but in hex. Using this to store the hex value..
+
 // The WAV Trigger object
 wavTrigger wTrig;
+
+// The Stereo Amplifier object
 Adafruit_TPA2016 audioamp = Adafruit_TPA2016();
+
+// IR Sensor object
+IRrecv irrecv(RECV_PIN);  // Receiving IR sensor signals on this pin
+decode_results results;   // Returns the decoded results (decode_type, addres, value, bits..etc.. Referenced using i.e. "results.value"
 
 // Rotary Encoder, pressing the rotary encoder button = pause/unpause, rotating changes the volume
 static uint8_t enc_prev_pos   = 0;  // These were copied directly from Adafruit's example
 static uint8_t enc_flags      = 0;  // These were copied directly from Adafruit's example
 static char    sw_was_pressed = 0;  // These were copied directly from Adafruit's example
-int volumeGain = -20;                // This is the default setting of dB from which we always start
+int volumeGain = -5;                // This is the default setting of dB from which we always start
 int volumeGain_old = 0;             // Used to store the old volume setting when pausing so 
                                     // we know where to return to when unpausing
 bool paused = false;                // Pause if true, unpause if false
@@ -142,11 +171,80 @@ void setup() {
   wTrig.stopAllTracks();      // Just in case..we want to start with a clean slate
   wTrig.samplerateOffset(0);  // Same here, reset any offset (speed/pitch). 
                               // I guess this is good practice, though I will not use the function
-  //wTrig.setAmpPwr(1);
+  // Start the amplifier
   audioamp.begin();
+
+  // Starting IR sensor receiver
+  irrecv.enableIRIn(); // Start the receiver
 }
 
 void loop() {
+  // START - IR Receiver Code
+  // Check if there is anything being received we should decode
+  if (irrecv.decode(&results)) {          // Get the results of the decoding..
+    hexRes = String(results.value, HEX);  // Make it a hex value
+    irrecv.resume();                      // Resume receiving..
+  }
+  // What to do for this and that code
+      if (hexRes == "fd40bf"){        // This is hex for volume up
+      volumeGain++;                   // Add to the existing volueGain variable
+      wTrig.masterGain(volumeGain);   // Set the master gain to the new value
+      delay(10);                      // Such a short delay that it is "ok". Just a "debounce"
+      hexRes = "000000";              // In preparation for the next IR code
+    }
+    if (hexRes == "fd00ff"){          // Hex for volume down.. 
+      volumeGain--;                   // Same a for volume up
+      wTrig.masterGain(volumeGain);   
+      delay(10);              
+      hexRes = "000000";
+    }
+    if (hexRes == "fd807f"){                    // Hex for Play / Pause
+       if (paused == false){                        // We were unpaused, but the button was pressed..start pausing!
+        volumeGain_old = volumeGain;                // Save the old volume setting
+        for (int i=volumeGain; i >= -70; i--){      // -70 is total silence..
+          wTrig.masterGain(i);                      // Set the master gain
+          delay(10);                                
+        } 
+        //digitalWrite(ampShutdown, LOW);           // Used to send shutdown signal to a SD pin on the amplifier. Will use I2C instead.
+        audioamp.enableChannel(false, false);       // Turn off both channels using I2C
+        paused = true;                              // We are now paused.. 
+      }else if (paused == true){                    // We were paused, but the button was pressed..start unapusing, get the show on the road!
+        //digitalWrite(ampShutdown, HIGH);          // Used to send shutdown signal to a SD pin on the amplifier. Will use I2C instead.
+        audioamp.enableChannel(true, true);         // Turn on both channels using I2C      
+        for (int i=-70; i <= volumeGain_old; i++){  // Increase the volume back to the old setting  
+          wTrig.masterGain(i);                      // Set the master gain
+          delay(10);                                
+        } 
+        paused = false;                             // We are now unpaused.. 
+      } 
+      hexRes = "000000";     
+    }
+
+ /* A list of possible codes from the remote control
+  * fd40bf Vol +        ## Used
+  * fd00ff Vol -        ## Used
+  * fd807f Play Pause   ## Used
+  * fd20df Setup        
+  * fda05f Up           ## Will use for menu
+  * fd609f Stop / Mode  
+  * fd10ef Left         ## Will use for menu
+  * fd906f Enter / Save ## Will use for menu
+  * fd50af Right        ## Will use for menu
+  * fd30cf 0 10+
+  * fdb04f Down         ## Will use for menu
+  * fd708f Back         ## Will use for menu
+  * fd08f7 1            ## Might use for direct selections of modes..
+  * fd8877 2 
+  * fd48b7 3
+  * fd28d7 4
+  * fda857 5
+  * fd6897 6
+  * fd18e7 7
+  * fd9867 8 
+  * fd58a7 9
+*/
+  // END - IR Receiver Code
+  
   // START - Rotary Encoder Code, copied from Adafruit
   int8_t enc_action = 0; // 1 or -1 if moved, sign is direction
  
@@ -242,7 +340,7 @@ void loop() {
         paused = true;                              // We are now paused.. 
       }else if (paused == true){                    // We were paused, but the button was pressed..start unapusing, get the show on the road!
         //digitalWrite(ampShutdown, HIGH);          // Used to send shutdown signal to a SD pin on the amplifier. Will use I2C instead.
-        audioamp.enableChannel(true, true);       // Turn on both channels using I2C      
+        audioamp.enableChannel(true, true);         // Turn on both channels using I2C      
         for (int i=-70; i <= volumeGain_old; i++){  // Increase the volume back to the old setting  
           wTrig.masterGain(i);                      // Set the master gain
           delay(10);                                // Swap this with millis() function, see above
@@ -262,7 +360,7 @@ void loop() {
     sw_was_pressed = 0;
   }
   // END - Rotary Encoder Code
-  
+
   // Time since starting..this is used all over the place
   unsigned long currentMillis = millis();
 
