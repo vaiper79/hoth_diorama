@@ -130,7 +130,8 @@ decode_results results;   // Returns the decoded results (decode_type, addres, v
 static uint8_t enc_prev_pos   = 0;  // These were copied directly from Adafruit's example
 static uint8_t enc_flags      = 0;  // These were copied directly from Adafruit's example
 static char    sw_was_pressed = 0;  // These were copied directly from Adafruit's example
-int volumeGain = -5;                // This is the default setting of dB from which we always start
+int maxVolume = -5;                 // Above this volume and we get crackling in the speakers..
+int volumeGain = -10;               // This is the default setting of dB from which we always start
 int volumeGain_old = 0;             // Used to store the old volume setting when pausing so 
                                     // we know where to return to when unpausing
 bool paused = false;                // Pause if true, unpause if false
@@ -186,11 +187,12 @@ void loop() {
     irrecv.resume();                      // Resume receiving..
   }
   // What to do for this and that code
-      if (hexRes == "fd40bf"){        // This is hex for volume up
-      volumeGain++;                   // Add to the existing volueGain variable
-      wTrig.masterGain(volumeGain);   // Set the master gain to the new value
-      delay(10);                      // Such a short delay that it is "ok". Just a "debounce"
-      hexRes = "000000";              // In preparation for the next IR code
+      if (hexRes == "fd40bf"){                              // This is hex for volume up
+      volumeGain++;                                         // Add to the existing volueGain variable
+      if (volumeGain >= maxVolume) volumeGain = maxVolume;  // Do not exceed the max volume
+      wTrig.masterGain(volumeGain);                         // Set the master gain to the new value
+      delay(10);                                            // Such a short delay that it is "ok". Just a "debounce"
+      hexRes = "000000";                                    // In preparation for the next IR code
     }
     if (hexRes == "fd00ff"){          // Hex for volume down.. 
       volumeGain--;                   // Same a for volume up
@@ -203,7 +205,7 @@ void loop() {
         volumeGain_old = volumeGain;                // Save the old volume setting
         for (int i=volumeGain; i >= -70; i--){      // -70 is total silence..
           wTrig.masterGain(i);                      // Set the master gain
-          delay(10);                                
+          delay(10);                                // Such a short delay that it is "ok". Just a "debounce"
         } 
         //digitalWrite(ampShutdown, LOW);           // Used to send shutdown signal to a SD pin on the amplifier. Will use I2C instead.
         audioamp.enableChannel(false, false);       // Turn off both channels using I2C
@@ -213,7 +215,7 @@ void loop() {
         audioamp.enableChannel(true, true);         // Turn on both channels using I2C      
         for (int i=-70; i <= volumeGain_old; i++){  // Increase the volume back to the old setting  
           wTrig.masterGain(i);                      // Set the master gain
-          delay(10);                                
+          delay(10);                                // Such a short delay that it is "ok". Just a "debounce"
         } 
         paused = false;                             // We are now unpaused.. 
       } 
@@ -319,8 +321,9 @@ void loop() {
     wTrig.masterGain(volumeGain); // Set the master gain
   }
   else if (enc_action < 0) {
-    volumeGain++;                 // Counterclockwise, i.e. multimedia volume down
-    wTrig.masterGain(volumeGain); // Set the master gain
+    volumeGain++;                                         // Counterclockwise, i.e. multimedia volume down
+    if (volumeGain >= maxVolume) volumeGain = maxVolume;  // Do not exceed the max volume
+    wTrig.masterGain(volumeGain);                         // Set the master gain
   }
   
   // remember that the switch is active low 
@@ -332,8 +335,7 @@ void loop() {
         volumeGain_old = volumeGain;                // Save the old volume setting
         for (int i=volumeGain; i >= -70; i--){      // -70 is total silence..
           wTrig.masterGain(i);                      // Set the master gain
-          delay(10);                                // Swap this with millis() function..
-                                                    // now it causes some level of "halt" when maniuplating the volume
+          delay(10);                                // Such a short delay that it is "ok". Just a "debounce"
         } 
         //digitalWrite(ampShutdown, LOW);           // Used to send shutdown signal to a SD pin on the amplifier. Will use I2C instead.
         audioamp.enableChannel(false, false);       // Turn off both channels using I2C
@@ -343,7 +345,7 @@ void loop() {
         audioamp.enableChannel(true, true);         // Turn on both channels using I2C      
         for (int i=-70; i <= volumeGain_old; i++){  // Increase the volume back to the old setting  
           wTrig.masterGain(i);                      // Set the master gain
-          delay(10);                                // Swap this with millis() function, see above
+          delay(10);                                // Such a short delay that it is "ok". Just a "debounce"
         } 
         paused = false;                             // We are now unpaused.. 
       }      
