@@ -1,5 +1,5 @@
 /* 
- *  AT-AT Gun'n'Walk V.1
+ *  AT-AT Gun'n'Walk V.10
  * 
  * Arduino Sketch for controlling lights and sounds in Hoth Diorama
  * by Ole Andre aka @oleshobbyblog www.oleandre.net
@@ -10,12 +10,10 @@
  * - Generel examples found within the Arduino IDE
  * - Fading: http://forum.arduino.cc/index.php?topic=12004.0
  * - No delay: https://www.baldengineer.com/fading-led-analogwrite-millis-example.html
- * - Rotary encoder: https://learn.adafruit.com/trinket-usb-volume-knob/code
  * - Odd/Even: http://forum.arduino.cc/index.php?topic=41397.0
  * - IR Sensor: https://github.com/adafruit/Adafruit-NEC-remote-control-library
  * 
  * Datasheets: 
- * - Rotary encoder: https://cdn-shop.adafruit.com/datasheets/pec11.pdf
  * - Mono amplifier: https://cdn-shop.adafruit.com/datasheets/PAM8302A.pdf
  * - Stereo amplifier: https://cdn-shop.adafruit.com/datasheets/TPA2016D2.pdf
  * - WAV Trigger: https://cdn.sparkfun.com/datasheets/Widgets/STM32F405RGT6.pdf
@@ -32,6 +30,8 @@
  * Acknowledgements:
  * - IR sensor code: Ken Shirriff (http://arcfn.com & http://z3t0.github.io/Arduino-IRremote/), TRULY a lifesaver!
  *                    (I had to swap to timer 1 in boarddefs.h due to a conflict with the SoftPWM library)
+ * - User sterretje of the Arduino forums: https://forum.arduino.cc/index.php?topic=454873.0 
+ * 
  *                    
  * Parts list:
  *  1x IR Sensor: http://www.adafruit.com/products/157
@@ -40,7 +40,6 @@
  *  1x Pro Trinket 5V:
  *  1x Stereo amplifier:
  *  2x Speakers:
- *  1x Rotary encoder:
  *  LEDs: 
  *  Resistors and wires
  */
@@ -53,23 +52,16 @@
 #include <IRremote.h>         // Used for the IR sensor function
 
 // Defining up the pins we will be using :)
-// Pins used for I2C: A4/A5/8
-#define snowspeederEng0 9         // PWM, left engine
-#define snowspeederEng1 10        // PWM, right engine
+// Pins used for I2C: A4/A5
+#define snowspeederEng0 A2        // SoftPWM, left engine
+#define snowspeederEng1 A3        // SoftPWM, right engine
 #define snowspeederCannon0 8      // SoftPWM, left cannon
-#define snowspeederCannon1 A0     // SoftPWM, right cannon
+#define snowspeederCannon1 5      // SoftPWM, right cannon
 #define atatCockpit 6             // PWM, light in AT AT cockpit
-#define hlc0 A2                   // Soft PWM if necessary, left HLC
-#define hlc1 A3                   // Soft PWM if necessary, right HLC
-#define explosion A1              // Soft PWM, explosion on ground
+#define hlc0 11                   // Soft PWM if necessary, left HLC
+#define hlc1 3                    // Soft PWM if necessary, right HLC
+#define explosion 4               // Soft PWM, explosion on ground
 #define RECV_PIN 12               // IR Sensor pin
-#define selectorSwitch 4          // State control button switch, was 8..but changed to 4 due to quicker read (PIND)
-#define selectorUp 3              // SelectorUp
-#define selectorDn 5              // SelectorDown
-#define selectorPin PIND          // https://www.arduino.cc/en/Reference/PortManipulation 
-                                  // Baiscally this means I must use the pins in the 0-7 range to use PIND.
-                                  // This is all because reading the pins takes longer than direct port access. 
-
 
 // To make the diorama more dynamic, I will use pseudo randomization. These
 // variables are meant to tell when to create new randoms. Basically on every run. 
@@ -81,6 +73,7 @@ bool rndmSpeederSpacer = false;     // false if no random timer set, true when w
 bool rndmSpeederShot = false;       // false if no random timer set, true when waiting to execute
 bool rndmSpeederShotSpacer = false; // false if no random timer set, true when waiting to execute
 bool doVoiceOrNot = false;          // False if we aren't supposed to talk.. 
+bool toggledAudio = true;           // True if audio ON
 
 // Variables used to ensure the proper flow of the sequence. When set true, the sequence will 
 // always move on to the next step. 
@@ -103,7 +96,7 @@ unsigned long previousATATShotMillis = 0;   // This is the timer for the ATAT fi
 unsigned long rndmSpeederMillis = 0;            // The time between each Snowspeeder sequence
 unsigned long rndmSpeederShotMillis = 0;        // The interval for the snowspeeder shots
 unsigned long rndmSpeederSpacerMillis = 0;      // The time between first/second Snowspeeder
-unsigned long rnmdSpeederShotSpacerMillis = 0;  // The time between the Snowspeeder shots
+unsigned long rndmSpeederShotSpacerMillis = 0;  // The time between the Snowspeeder shots
 unsigned long spacerSpeederShotMillis = 0;      // How far between the snowspeeders
 unsigned long previousSpeederMillis = 0;        // This is the timer for the snowspeeder sequences
 
@@ -127,16 +120,13 @@ IRrecv irrecv(RECV_PIN);  // Receiving IR sensor signals on this pin
 decode_results results;   // Returns the decoded results (decode_type, addres, value, bits..etc.. Referenced using i.e. "results.value"
 
 // Rotary Encoder, pressing the rotary encoder button = pause/unpause, rotating changes the volume
-static uint8_t enc_prev_pos   = 0;  // These were copied directly from Adafruit's example
-static uint8_t enc_flags      = 0;  // These were copied directly from Adafruit's example
-static char    sw_was_pressed = 0;  // These were copied directly from Adafruit's example
 int maxVolume = -5;                 // Above this volume and we get crackling in the speakers..
 int volumeGain = -10;               // This is the default setting of dB from which we always start
 int volumeGain_old = 0;             // Used to store the old volume setting when pausing so 
                                     // we know where to return to when unpausing
 bool paused = false;                // Pause if true, unpause if false
 
-void setup() {
+void setup() {  
   SoftPWMBegin();     // Initiate SoftPWM, this allows "regular" pins to act as PWM pins. Very useful!
 
   // Define what pins are to be SoftPWM pins, and what their initial value will be
@@ -145,27 +135,18 @@ void setup() {
   SoftPWMSet(snowspeederCannon0, 0);
   SoftPWMSet(snowspeederCannon1, 0);
   SoftPWMSet(explosion, 0);
+  SoftPWMSet(snowspeederEng0, 0);
+  SoftPWMSet(snowspeederEng1, 0);
 
   // Define the speed with which the LEDs will fade in, and fade out, respectively. 
   SoftPWMSetFadeTime(hlc0, 10, 50);
   SoftPWMSetFadeTime(hlc1, 10, 50);
   SoftPWMSetFadeTime(snowspeederCannon0, 10, 50);
   SoftPWMSetFadeTime(snowspeederCannon1, 10, 50);
+  SoftPWMSetFadeTime(snowspeederEng0, 10, 10);
+  SoftPWMSetFadeTime(snowspeederEng1, 10, 10);
   SoftPWMSetFadeTime(explosion, 10, 1000);        // The explosion looks better if it takes a while to die down. 
-
-  // set pins as input with internal pull-up resistors enabled, copied from Adafruit
-  pinMode(selectorUp, INPUT_PULLUP);
-  pinMode(selectorDn, INPUT_PULLUP);
-  pinMode(selectorSwitch, INPUT_PULLUP);
-
-  // get an initial reading on the encoder pins, copied from Adafruit 
-  if (digitalRead(selectorUp) == LOW) {
-    enc_prev_pos |= (1 << 0);
-  }
-  if (digitalRead(selectorDn) == LOW) {
-    enc_prev_pos |= (1 << 1);
-  }
-
+  
   // WAV Trigger startup at 57600
   wTrig.start();
   delay(10);
@@ -207,25 +188,51 @@ void loop() {
           wTrig.masterGain(i);                      // Set the master gain
           delay(10);                                // Such a short delay that it is "ok". Just a "debounce"
         } 
-        //digitalWrite(ampShutdown, LOW);           // Used to send shutdown signal to a SD pin on the amplifier. Will use I2C instead.
         audioamp.enableChannel(false, false);       // Turn off both channels using I2C
         paused = true;                              // We are now paused.. 
+        analogWrite(atatCockpit, 0);                // Light the ATAT cockpit
+        SoftPWMSet(snowspeederEng0, 0);             // Light the Snowspeeder engines
+        SoftPWMSet(snowspeederEng1, 0);             // ------ '' ------
       }else if (paused == true){                    // We were paused, but the button was pressed..start unapusing, get the show on the road!
-        //digitalWrite(ampShutdown, HIGH);          // Used to send shutdown signal to a SD pin on the amplifier. Will use I2C instead.
         audioamp.enableChannel(true, true);         // Turn on both channels using I2C      
         for (int i=-70; i <= volumeGain_old; i++){  // Increase the volume back to the old setting  
           wTrig.masterGain(i);                      // Set the master gain
           delay(10);                                // Such a short delay that it is "ok". Just a "debounce"
         } 
         paused = false;                             // We are now unpaused.. 
+        analogWrite(atatCockpit, 15);               // Light the ATAT cockpit
+        SoftPWMSet(snowspeederEng0, 10);            // Light the Snowspeeder engines
+        SoftPWMSet(snowspeederEng1, 10);            // ------ '' ------
+      } 
+      hexRes = "000000";     
+    }
+    if (hexRes == "fd08f7"){                        // Hex for 1
+       if (toggledAudio == true){                  // We were unpaused, but the button was pressed..start pausing!
+        volumeGain_old = volumeGain;                // Save the old volume setting
+        for (int i=volumeGain; i >= -70; i--){      // -70 is total silence..
+          wTrig.masterGain(i);                      // Set the master gain
+          delay(10);                                // Such a short delay that it is "ok". Just a "debounce"
+        } 
+        audioamp.enableChannel(false, false);       // Turn off both channels using I2C
+        toggledAudio = false;                              // We are now paused.. 
+      }else if (toggledAudio == false){                    // We were paused, but the button was pressed..start unapusing, get the show on the road!
+        audioamp.enableChannel(true, true);         // Turn on both channels using I2C      
+        for (int i=-70; i <= volumeGain_old; i++){  // Increase the volume back to the old setting  
+          wTrig.masterGain(i);                      // Set the master gain
+          delay(10);                                // Such a short delay that it is "ok". Just a "debounce"
+        } 
+        toggledAudio = true;                             // We are now unpaused.. 
       } 
       hexRes = "000000";     
     }
 
+
  /* A list of possible codes from the remote control
-  * fd40bf Vol +        ## Used
-  * fd00ff Vol -        ## Used
-  * fd807f Play Pause   ## Used
+  * fd40bf Vol +        ## Used Vol +
+  * fd00ff Vol -        ## Used Vol -
+  * fd807f Play Pause   ## Used Play/Pause
+  * fd08f7 1            ## USED - Toggle Audio mode ON/OFF
+  * 
   * fd20df Setup        
   * fda05f Up           ## Will use for menu
   * fd609f Stop / Mode  
@@ -235,8 +242,7 @@ void loop() {
   * fd30cf 0 10+
   * fdb04f Down         ## Will use for menu
   * fd708f Back         ## Will use for menu
-  * fd08f7 1            ## Might use for direct selections of modes..
-  * fd8877 2 
+  * fd8877 2             
   * fd48b7 3
   * fd28d7 4
   * fda857 5
@@ -247,122 +253,6 @@ void loop() {
 */
   // END - IR Receiver Code
   
-  // START - Rotary Encoder Code, copied from Adafruit
-  int8_t enc_action = 0; // 1 or -1 if moved, sign is direction
- 
-  // note: for better performance, the code will use
-  // direct port access techniques
-  // http://www.arduino.cc/en/Reference/PortManipulation
-  // This bit was necessary to read in order to use the correct pin configuration.
-  // I use a Pro Trinket, it varies slightly from the regular full size Arduino boards.
-  
-  uint8_t enc_cur_pos = 0;
-  // read in the encoder state first
-  if (bit_is_clear(selectorPin, selectorUp)) {
-    enc_cur_pos |= (1 << 0);
-  }
-  if (bit_is_clear(selectorPin, selectorDn)) {
-    enc_cur_pos |= (1 << 1);
-  }
- 
-  // if any rotation at all
-  if (enc_cur_pos != enc_prev_pos)
-  {
-    if (enc_prev_pos == 0x00)
-    {
-      // this is the first edge
-      if (enc_cur_pos == 0x01) {
-        enc_flags |= (1 << 0);
-      }
-      else if (enc_cur_pos == 0x02) {
-        enc_flags |= (1 << 1);
-      }
-    }
- 
-    if (enc_cur_pos == 0x03)
-    {
-      // this is when the encoder is in the middle of a "step"
-      enc_flags |= (1 << 4);
-    }
-    else if (enc_cur_pos == 0x00)
-    {
-      // this is the final edge
-      if (enc_prev_pos == 0x02) {
-        enc_flags |= (1 << 2);
-      }
-      else if (enc_prev_pos == 0x01) {
-        enc_flags |= (1 << 3);
-      }
- 
-      // check the first and last edge
-      // or maybe one edge is missing, if missing then require the middle state
-      // this will reject bounces and false movements
-      if (bit_is_set(enc_flags, 0) && (bit_is_set(enc_flags, 2) || bit_is_set(enc_flags, 4))) {
-        enc_action = 1;
-      }
-      else if (bit_is_set(enc_flags, 2) && (bit_is_set(enc_flags, 0) || bit_is_set(enc_flags, 4))) {
-        enc_action = 1;
-      }
-      else if (bit_is_set(enc_flags, 1) && (bit_is_set(enc_flags, 3) || bit_is_set(enc_flags, 4))) {
-        enc_action = -1;
-      }
-      else if (bit_is_set(enc_flags, 3) && (bit_is_set(enc_flags, 1) || bit_is_set(enc_flags, 4))) {
-        enc_action = -1;
-      }
- 
-      enc_flags = 0; // reset for next time
-    }
-  }
- 
-  enc_prev_pos = enc_cur_pos;
- 
-  if (enc_action > 0) {
-    volumeGain--;                 // Clockwise, i.e. send multimedia volume up
-    wTrig.masterGain(volumeGain); // Set the master gain
-  }
-  else if (enc_action < 0) {
-    volumeGain++;                                         // Counterclockwise, i.e. multimedia volume down
-    if (volumeGain >= maxVolume) volumeGain = maxVolume;  // Do not exceed the max volume
-    wTrig.masterGain(volumeGain);                         // Set the master gain
-  }
-  
-  // remember that the switch is active low 
-  if (bit_is_clear(selectorPin, selectorSwitch)) 
-  {
-    if (sw_was_pressed == 0) // only on initial press, so the keystroke is not repeated while the button is held down
-    {
-      if (paused == false){                         // We were unpaused, but the button was pressed..start pausing!
-        volumeGain_old = volumeGain;                // Save the old volume setting
-        for (int i=volumeGain; i >= -70; i--){      // -70 is total silence..
-          wTrig.masterGain(i);                      // Set the master gain
-          delay(10);                                // Such a short delay that it is "ok". Just a "debounce"
-        } 
-        //digitalWrite(ampShutdown, LOW);           // Used to send shutdown signal to a SD pin on the amplifier. Will use I2C instead.
-        audioamp.enableChannel(false, false);       // Turn off both channels using I2C
-        paused = true;                              // We are now paused.. 
-      }else if (paused == true){                    // We were paused, but the button was pressed..start unapusing, get the show on the road!
-        //digitalWrite(ampShutdown, HIGH);          // Used to send shutdown signal to a SD pin on the amplifier. Will use I2C instead.
-        audioamp.enableChannel(true, true);         // Turn on both channels using I2C      
-        for (int i=-70; i <= volumeGain_old; i++){  // Increase the volume back to the old setting  
-          wTrig.masterGain(i);                      // Set the master gain
-          delay(10);                                // Such a short delay that it is "ok". Just a "debounce"
-        } 
-        paused = false;                             // We are now unpaused.. 
-      }      
-      // Encoder pushed down, i.e. toggle mute or not or select/enter
-      delay(5); // debounce delay
-    }
-    sw_was_pressed = 1;
-  }
-  else
-  {
-    if (sw_was_pressed != 0) {
-      delay(5); // debounce delay
-    }
-    sw_was_pressed = 0;
-  }
-  // END - Rotary Encoder Code
-
   // Time since starting..this is used all over the place
   unsigned long currentMillis = millis();
 
@@ -371,6 +261,8 @@ void loop() {
     // START - Code only executed the very first time through the loop
     if (started == false){                          // If this is the first time then started = false
       analogWrite(atatCockpit, 15);     // Light the ATAT cockpit
+      SoftPWMSet(snowspeederEng0, 10);  // Light the Snowspeeder engines
+      SoftPWMSet(snowspeederEng1, 10);  // ------ '' ------
       //wTrig.stopAllTracks();          // Was used for a period when I tried to halt the sequence.
                                         // Will keep this in case I find I want to add an on/off feature..
       wTrig.masterGain(volumeGain);     // Sets the master gain to whatever is set (set low during dev to 
@@ -421,7 +313,7 @@ void loop() {
       oneOrTwo = random(10,15);                       // Should the snowspeeder flight be a one of two ship formation?
       shootOrNot = random(15,20);                     // Should they fire or not?
       numberOfShots = random(1,4);                    // How many shots? From 1 to and including 3
-      rnmdSpeederShotSpacerMillis = random(100,200);  // Time between first two salvos
+      rndmSpeederShotSpacerMillis = random(100,200);  // Time between first two salvos
       rndmSpeederMillis = random(1000, 5000);         // The snowspeeder flight interval
       rndmSpeederFlight = true;
     }
@@ -433,6 +325,7 @@ void loop() {
       rndmSpeederShotMillis = random(30, 60);         // The time between each snowspeeder shot, from 30 to 60 ms. 
       rndmSpeederShot = true;
     }
+    
     // END - Random generators
 
     /* I have decided to do the ATAT and Snowspeeders as separate entities that exist in code independent of each other. Multitasking. 
@@ -548,12 +441,12 @@ void loop() {
           previousSpeederMillis = currentMillis;
           while(speederShot<numberOfShots){
             currentMillis = millis();       // Get time while inside the while loop.. 
-            if ((currentMillis - previousSpeederMillis >= rnmdSpeederShotSpacerMillis) && (fired == 0)) {
+            if ((currentMillis - previousSpeederMillis >= rndmSpeederShotSpacerMillis) && (fired == 0)) {
               previousSpeederMillis = currentMillis;
               wTrig.trackPlayPoly(8);
               if ((speederShot % 2) == 0) SoftPWMSet(snowspeederCannon0, 120); // Even
               if (speederShot % 2) SoftPWMSet(snowspeederCannon1, 120); // Odd
-              rnmdSpeederShotSpacerMillis = random(100,300);
+              rndmSpeederShotSpacerMillis = random(100,300);
               fired = 1;    
             }
             if ((currentMillis - previousSpeederMillis >= 20) && (fired == 1)) {

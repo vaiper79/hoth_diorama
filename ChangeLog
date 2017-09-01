@@ -1,0 +1,32 @@
+Change Log
+
+Not Fixed:
+- Incorporate OLED
+- Possibly create other versions of the HLC fire and Speeder blaster sounds for dynamic-ism
+- Consider a functionality where one can switch off elements.. Like isolate the ATAT or just the snow speeders.
+- Music mode..i.e. dialogue from the scene in the movie on top of the sounds, possibly turns he volume of the action down to hear the voice  of Luke.. See if I can get voice of Luke without other sounds..hmm..
+- Change paused mode to be lights off, make the OLED blink paused. Partially done, waiting for OLED. 
+
+Done/Ignored/Fixed (version numbers are internal for now):
+Version 10: 
+- Create non-audio mode, just the light
+Version 9:
+- Fixed: Make engine LEDs “flicker”..f-ing impossible..too much silliness happening between SoftPWM and crap..maybe later.. 
+- Done: Consider removing the rotary encoder..just another physical hole in case now that the remote works
+- Ignored: Try to fix the delay/millis issue with the volume setting
+- Fixed: Make the volume setting never go above a certain limit to avoide clipping the speakers
+Version 8:
+- Fixed: Incorporate new Amp
+Version 7:
+- Fixed: At one point the ATAT HLC1 fires and seems to hang, after which we sometimes get glitches where the ATAT fires audio but not the LED. Pseudo random means it happens at the same time, every time..
+- Fixed: If available pins, add LEDs for lasers on Speeder, use odd even function to fire every other side :) 
+    - Even: if ( (i % 2) == 0) { do_something(); }
+    - Odd: if ( (i & 0x01) == 0) { do_something(); }
+    - or alt Odd: if (i % 2) { // do something odd; } 
+- Fixed: Explode more often
+- Fixed: Randomize explosions
+- Fixed: Randomize Speeder sounds. 
+
+Misc: 
+- Using SoftPWM fade in and out to circumvent the need to create a fade in and out function for the explosions.. :-) 
+- Fixed timer issue between SoftPWM and IRRemote..gah!
