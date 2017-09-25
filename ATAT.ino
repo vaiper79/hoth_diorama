@@ -1,5 +1,5 @@
 /* 
- *  AT-AT Gun'n'Walk V.10
+ *  AT-AT Gun'n'Walk V.11
  * 
  * Arduino Sketch for controlling lights and sounds in Hoth Diorama
  * by Ole Andre aka @oleshobbyblog www.oleandre.net
@@ -40,6 +40,7 @@
  *  1x Pro Trinket 5V:
  *  1x Stereo amplifier:
  *  2x Speakers:
+ *  1x 128x32 i2c OLED: 
  *  LEDs: 
  *  Resistors and wires
  */
@@ -47,7 +48,10 @@
 // Include some libraries we need :) 
 #include <SoftPWM.h>          // Software PWM due to too few analog write pins
 #include <wavTrigger.h>       // For controlling the WAV Trigger via serial
-//#include <Wire.h>           // Used for I2C communications
+#include <SPI.h>              // Used for I2C communications
+#include <Wire.h>             // Used for I2C communications
+#include <Adafruit_GFX.h>     // For graphics on the display  
+#include <Adafruit_SSD1306.h> // The OLED library (defaults to the 128x32 size, must change if I go for bigger screen size)
 #include "Adafruit_TPA2016.h" // Used for the I2C controlled stereo amplifier
 #include <IRremote.h>         // Used for the IR sensor function
 
@@ -62,6 +66,7 @@
 #define hlc1 3                    // Soft PWM if necessary, right HLC
 #define explosion 4               // Soft PWM, explosion on ground
 #define RECV_PIN 12               // IR Sensor pin
+#define OLED_RESET 13			  // OLED requires a reset pin
 
 // To make the diorama more dynamic, I will use pseudo randomization. These
 // variables are meant to tell when to create new randoms. Basically on every run. 
@@ -74,6 +79,8 @@ bool rndmSpeederShot = false;       // false if no random timer set, true when w
 bool rndmSpeederShotSpacer = false; // false if no random timer set, true when waiting to execute
 bool doVoiceOrNot = false;          // False if we aren't supposed to talk.. 
 bool toggledAudio = true;           // True if audio ON
+bool scroll = false;                // True = we are scrolling
+
 
 // Variables used to ensure the proper flow of the sequence. When set true, the sequence will 
 // always move on to the next step. 
@@ -99,6 +106,7 @@ unsigned long rndmSpeederSpacerMillis = 0;      // The time between first/second
 unsigned long rndmSpeederShotSpacerMillis = 0;  // The time between the Snowspeeder shots
 unsigned long spacerSpeederShotMillis = 0;      // How far between the snowspeeders
 unsigned long previousSpeederMillis = 0;        // This is the timer for the snowspeeder sequences
+unsigned long scrollingTemp = 0;
 
 byte explodeOrNot;    // Used for a kind of dice roll to decide if the lasers hit, to generate an explosion
 byte oneOrTwo;        // Two or one snowspeeder will fly past?
@@ -115,6 +123,9 @@ wavTrigger wTrig;
 // The Stereo Amplifier object
 Adafruit_TPA2016 audioamp = Adafruit_TPA2016();
 
+// Initialize the OLED display
+Adafruit_SSD1306 display(OLED_RESET);
+
 // IR Sensor object
 IRrecv irrecv(RECV_PIN);  // Receiving IR sensor signals on this pin
 decode_results results;   // Returns the decoded results (decode_type, addres, value, bits..etc.. Referenced using i.e. "results.value"
@@ -126,8 +137,26 @@ int volumeGain_old = 0;             // Used to store the old volume setting when
                                     // we know where to return to when unpausing
 bool paused = false;                // Pause if true, unpause if false
 
-void setup() {  
-  SoftPWMBegin();     // Initiate SoftPWM, this allows "regular" pins to act as PWM pins. Very useful!
+// Graphics Department.. 
+// Empire Emblem
+#define First_Galactic_Empire_emblem_width 32
+#define First_Galactic_Empire_emblem_height 31
+static const unsigned char PROGMEM First_Galactic_Empire_emblem_bits[] = {
+0x00, 0x00, 0x00, 0x00, 0x00, 0x1F, 0xFC, 0x00, 0x00, 0xF9, 0x9F, 0x00, 0x01, 0xC7, 0xE3, 0x80,
+0x03, 0x07, 0xE0, 0xC0, 0x06, 0x1F, 0xF8, 0x60, 0x0C, 0x7C, 0x3E, 0x30, 0x1B, 0xFC, 0x3F, 0xD8,
+0x3F, 0xFC, 0x3F, 0xFC, 0x3F, 0xBC, 0x3D, 0xFC, 0x2F, 0x1E, 0x78, 0xF4, 0x6E, 0x0C, 0x30, 0x76,
+0x66, 0x00, 0x00, 0x66, 0x67, 0x00, 0x01, 0xE6, 0x47, 0xE0, 0x07, 0xE2, 0x47, 0xE0, 0x07, 0xE2,
+0x47, 0xE0, 0x07, 0xE2, 0x67, 0x00, 0x00, 0xE2, 0x66, 0x00, 0x00, 0x66, 0x6E, 0x0C, 0x30, 0x76,
+0x2F, 0x1E, 0x78, 0xF4, 0x3F, 0xBC, 0x3D, 0xFC, 0x3F, 0xFC, 0x3F, 0xFC, 0x1B, 0xFC, 0x3F, 0xD8,
+0x0C, 0x7C, 0x3E, 0x30, 0x06, 0x1F, 0xF8, 0x60, 0x03, 0x07, 0xE0, 0xC0, 0x01, 0xC7, 0xE3, 0x80,
+0x00, 0xF9, 0x9F, 0x00, 0x00, 0x1F, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+
+void setup() {
+	
+  Serial.begin(9600);		// Think we need this to print text to the display..maybe..hmm
+  
+  SoftPWMBegin();     	// Initiate SoftPWM, this allows "regular" pins to act as PWM pins. Very useful!
 
   // Define what pins are to be SoftPWM pins, and what their initial value will be
   SoftPWMSet(hlc0, 0);  
@@ -147,7 +176,7 @@ void setup() {
   SoftPWMSetFadeTime(snowspeederEng1, 10, 10);
   SoftPWMSetFadeTime(explosion, 10, 1000);        // The explosion looks better if it takes a while to die down. 
   
-  // WAV Trigger startup at 57600
+  // WAV Trigger startup
   wTrig.start();
   delay(10);
   wTrig.stopAllTracks();      // Just in case..we want to start with a clean slate
@@ -158,6 +187,20 @@ void setup() {
 
   // Starting IR sensor receiver
   irrecv.enableIRIn(); // Start the receiver
+
+	// Some display code
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x32)
+  display.display();													// Display the splash screen..
+  delay(2000); 																// ..for two seconds.. 
+  display.clearDisplay();											// Clear the buffer	
+  display.drawBitmap(0, 0, First_Galactic_Empire_emblem_bits, 32, 31, 1); // miniature bitmap display
+  display.setTextSize(1);											// Set the text size
+  display.setTextColor(WHITE);								// ..and color
+  display.setCursor(40,7);										// ..and location
+  display.println("Hoth Diorama");						// ..enter text
+  display.setCursor(40,17);										// ..new line
+  display.println("Info Screen");							// ..enter text
+  display.display();													// Display!
 }
 
 void loop() {
@@ -183,6 +226,9 @@ void loop() {
     }
     if (hexRes == "fd807f"){                    // Hex for Play / Pause
        if (paused == false){                        // We were unpaused, but the button was pressed..start pausing!
+        analogWrite(atatCockpit, 0);                // Light the ATAT cockpit
+        SoftPWMSet(snowspeederEng0, 0);             // Light the Snowspeeder engines
+        SoftPWMSet(snowspeederEng1, 0);             // ------ '' ------
         volumeGain_old = volumeGain;                // Save the old volume setting
         for (int i=volumeGain; i >= -70; i--){      // -70 is total silence..
           wTrig.masterGain(i);                      // Set the master gain
@@ -190,19 +236,18 @@ void loop() {
         } 
         audioamp.enableChannel(false, false);       // Turn off both channels using I2C
         paused = true;                              // We are now paused.. 
-        analogWrite(atatCockpit, 0);                // Light the ATAT cockpit
-        SoftPWMSet(snowspeederEng0, 0);             // Light the Snowspeeder engines
-        SoftPWMSet(snowspeederEng1, 0);             // ------ '' ------
+
       }else if (paused == true){                    // We were paused, but the button was pressed..start unapusing, get the show on the road!
+        analogWrite(atatCockpit, 15);               // Light the ATAT cockpit
+        SoftPWMSet(snowspeederEng0, 10);            // Light the Snowspeeder engines
+        SoftPWMSet(snowspeederEng1, 10);            // ------ '' ------ 
         audioamp.enableChannel(true, true);         // Turn on both channels using I2C      
         for (int i=-70; i <= volumeGain_old; i++){  // Increase the volume back to the old setting  
           wTrig.masterGain(i);                      // Set the master gain
           delay(10);                                // Such a short delay that it is "ok". Just a "debounce"
         } 
         paused = false;                             // We are now unpaused.. 
-        analogWrite(atatCockpit, 15);               // Light the ATAT cockpit
-        SoftPWMSet(snowspeederEng0, 10);            // Light the Snowspeeder engines
-        SoftPWMSet(snowspeederEng1, 10);            // ------ '' ------
+
       } 
       hexRes = "000000";     
     }
@@ -256,10 +301,20 @@ void loop() {
   // Time since starting..this is used all over the place
   unsigned long currentMillis = millis();
 
+  // Start Scrolling
+  if (scroll == false){
+    if (currentMillis - scrollingTemp >= 5000) {   	// Basically means we wait 5 seconds before starting to scroll.. 
+      scrollingTemp = currentMillis;               	// Storing the time we did this
+      display.startscrollright(0x00, 0x0F);					// Scroll screen contents to the right!
+      scroll = true;
+    }  
+  }
+  // END Scrolling
+
   if (paused == false){ // false = not paused
 
     // START - Code only executed the very first time through the loop
-    if (started == false){                          // If this is the first time then started = false
+    if (started == false){              // If this is the first time then started = false
       analogWrite(atatCockpit, 15);     // Light the ATAT cockpit
       SoftPWMSet(snowspeederEng0, 10);  // Light the Snowspeeder engines
       SoftPWMSet(snowspeederEng1, 10);  // ------ '' ------
@@ -277,7 +332,7 @@ void loop() {
                                         // unless there is a power cycle.
 
       // Stereo Amplifier commands (I2C)
-      audioamp.enableChannel(true, true);           // Turn on the amplifier, both channels (I2C)
+      audioamp.enableChannel(true, false);           // Turn on the amplifier, both channels (I2C)
       audioamp.setGain(0);                          // Set the initial gain to 0. Must make a decision 
                                                     // to either use the amp or the wav trigger for volume adjustment
       //audioamp.setLimitLevelOn();                 // For testing
@@ -476,3 +531,4 @@ void loop() {
     // do nothing..we are holding.. 
   }
 }
+
