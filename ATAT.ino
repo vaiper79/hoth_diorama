@@ -57,16 +57,16 @@
 
 // Defining up the pins we will be using :)
 // Pins used for I2C: A4/A5
-#define snowspeederEng0 A2        // SoftPWM, left engine
-#define snowspeederEng1 A3        // SoftPWM, right engine
-#define snowspeederCannon0 8      // SoftPWM, left cannon
-#define snowspeederCannon1 5      // SoftPWM, right cannon
-#define atatCockpit 6             // PWM, light in AT AT cockpit
-#define hlc0 11                   // Soft PWM if necessary, left HLC
-#define hlc1 3                    // Soft PWM if necessary, right HLC
-#define explosion 4               // Soft PWM, explosion on ground
-#define RECV_PIN 12               // IR Sensor pin
-#define OLED_RESET 13			  // OLED requires a reset pin
+#define snowspeederEng0 A2    // SoftPWM, left engine
+#define snowspeederEng1 A3    // SoftPWM, right engine
+#define snowspeederCannon0 8  // SoftPWM, left cannon
+#define snowspeederCannon1 5  // SoftPWM, right cannon
+#define atatCockpit 6         // PWM, light in AT AT cockpit
+#define hlc0 11               // Soft PWM if necessary, left HLC
+#define hlc1 3                // Soft PWM if necessary, right HLC
+#define explosion 4           // Soft PWM, explosion on ground
+#define RECV_PIN 12           // IR Sensor pin
+#define OLED_RESET 13         // OLED requires a reset pin
 
 // To make the diorama more dynamic, I will use pseudo randomization. These
 // variables are meant to tell when to create new randoms. Basically on every run. 
@@ -78,8 +78,17 @@ bool rndmSpeederSpacer = false;     // false if no random timer set, true when w
 bool rndmSpeederShot = false;       // false if no random timer set, true when waiting to execute
 bool rndmSpeederShotSpacer = false; // false if no random timer set, true when waiting to execute
 bool doVoiceOrNot = false;          // False if we aren't supposed to talk.. 
-bool toggledAudio = true;           // True if audio ON
-bool scroll = false;                // True = we are scrolling
+
+// Some bools to control various states
+bool toggledAudio = true;         // True if audio ON
+bool scroll = false;              // True = we are scrolling
+bool blinker = false;             // Used to blink the pause screen
+bool asYouWere = false;           // Back to business.. 
+bool volumeAdjustedStep1 = false; // State just after volume has been adjusted, in two steps
+bool volumeAdjustedStep2 = false; // State just after volume has been adjusted, in two steps
+bool paused = false;              // Pause if true, unpause if false
+bool previousPause = false;       // Saving the state we had on the last loop
+bool started = false;             // True = started, False = "First run, do this once"
 
 
 // Variables used to ensure the proper flow of the sequence. When set true, the sequence will 
@@ -89,24 +98,23 @@ bool ATATShot2 = false; // False means we have not "been" there yet, true means 
 bool speeder1 = false;  // False means we have not "been" there yet, true means we have and to "move on to the next"
 bool speeder2 = false;  // False means we have not "been" there yet, true means we have and to "move on to the next"
 
-// To allow for some start-up stuff to happen once. Set true when start up has happened. 
-bool started = false; // True = started, False = "First run, do this once"
-
-// Create some variables for randomization
+// Create some variables for randomization and timimg
 byte ATATShotLength = 20;                   // The length of the ATAT laser cannon flash
 unsigned long rndmATATShotMillis = 0;       // Time between each ATAT shooting sequence
 unsigned long rndmATATExplosionMillis = 0;  // Time between last ATAT HCL firing and explosion
 unsigned long rndmATATSpacerMillis = 0;     // How far between the AT AT HLC shots
 unsigned long previousATATShotMillis = 0;   // This is the timer for the ATAT firing sequences, 
                                             // used to ensure that we trigger things at the right times
-
 unsigned long rndmSpeederMillis = 0;            // The time between each Snowspeeder sequence
 unsigned long rndmSpeederShotMillis = 0;        // The interval for the snowspeeder shots
 unsigned long rndmSpeederSpacerMillis = 0;      // The time between first/second Snowspeeder
 unsigned long rndmSpeederShotSpacerMillis = 0;  // The time between the Snowspeeder shots
 unsigned long spacerSpeederShotMillis = 0;      // How far between the snowspeeders
 unsigned long previousSpeederMillis = 0;        // This is the timer for the snowspeeder sequences
-unsigned long scrollingTemp = 0;
+unsigned long startScroll = 0;                  // Used for the scrolling that starts automatically after boot          
+unsigned long previousBlink = 0;                // Used for the blinking pause indicator
+unsigned long wasPausedTime = 0;                // We want scrolling to resume after 
+unsigned long adjustedVolumeTime = 0;           // Also after adjusting the volume "stuff" should happen
 
 byte explodeOrNot;    // Used for a kind of dice roll to decide if the lasers hit, to generate an explosion
 byte oneOrTwo;        // Two or one snowspeeder will fly past?
@@ -132,10 +140,11 @@ decode_results results;   // Returns the decoded results (decode_type, addres, v
 
 // Rotary Encoder, pressing the rotary encoder button = pause/unpause, rotating changes the volume
 int maxVolume = -5;                 // Above this volume and we get crackling in the speakers..
+int minVolume = -70;                // Below this and it gets silly, the amp goes to -70..why would we need to go lower
 int volumeGain = -10;               // This is the default setting of dB from which we always start
 int volumeGain_old = 0;             // Used to store the old volume setting when pausing so 
                                     // we know where to return to when unpausing
-bool paused = false;                // Pause if true, unpause if false
+int newVolume = 0;                  // For mapping to "nicer" numbers
 
 // Graphics Department.. 
 // Empire Emblem
@@ -153,10 +162,10 @@ static const unsigned char PROGMEM First_Galactic_Empire_emblem_bits[] = {
 };
 
 void setup() {
-	
-  Serial.begin(9600);		// Think we need this to print text to the display..maybe..hmm
   
-  SoftPWMBegin();     	// Initiate SoftPWM, this allows "regular" pins to act as PWM pins. Very useful!
+  //Serial.begin(9600);   // Think we need this to print text to the display..maybe..hmm
+  
+  SoftPWMBegin();       // Initiate SoftPWM, this allows "regular" pins to act as PWM pins. Very useful!
 
   // Define what pins are to be SoftPWM pins, and what their initial value will be
   SoftPWMSet(hlc0, 0);  
@@ -188,22 +197,31 @@ void setup() {
   // Starting IR sensor receiver
   irrecv.enableIRIn(); // Start the receiver
 
-	// Some display code
+  // Some display code
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x32)
-  display.display();													// Display the splash screen..
-  delay(2000); 																// ..for two seconds.. 
-  display.clearDisplay();											// Clear the buffer	
+  display.display();                          // Display the splash screen..
+//  delay(2000);                                // ..for two seconds.. 
+  description();
+}
+
+void description(){
+  display.clearDisplay();                     // Clear the buffer 
   display.drawBitmap(0, 0, First_Galactic_Empire_emblem_bits, 32, 31, 1); // miniature bitmap display
-  display.setTextSize(1);											// Set the text size
-  display.setTextColor(WHITE);								// ..and color
-  display.setCursor(40,7);										// ..and location
-  display.println("Hoth Diorama");						// ..enter text
-  display.setCursor(40,17);										// ..new line
-  display.println("Info Screen");							// ..enter text
-  display.display();													// Display!
+  display.setTextSize(3);                     // Set the text size
+  display.setTextColor(WHITE);                // ..and color
+  display.setCursor(45,0);                    // ..and location
+  display.println("HOTH");            // ..enter text
+  display.setTextSize(1);                     // Set the text size
+  display.setCursor(47,25);                   // ..new line
+  display.println("Version:1.0");             // ..enter text
+  display.display();                          // Display!
+  delay(1);
 }
 
 void loop() {
+  // Time since boot..this is used all over the place
+  unsigned long currentMillis = millis();
+  
   // START - IR Receiver Code
   // Check if there is anything being received we should decode
   if (irrecv.decode(&results)) {          // Get the results of the decoding..
@@ -215,17 +233,47 @@ void loop() {
       volumeGain++;                                         // Add to the existing volueGain variable
       if (volumeGain >= maxVolume) volumeGain = maxVolume;  // Do not exceed the max volume
       wTrig.masterGain(volumeGain);                         // Set the master gain to the new value
-      delay(10);                                            // Such a short delay that it is "ok". Just a "debounce"
-      hexRes = "000000";                                    // In preparation for the next IR code
+      
+      hexRes = "000000";                            // In preparation for the next IR code
+      display.stopscroll();                         // Stop any scrolling of the screen
+      display.clearDisplay();                       // Clear the buffer 
+      display.setTextSize(4);                       // Set the text size
+      display.setTextColor(WHITE);                  // ..and color
+      display.setCursor(40,5);                      // ..and location
+      newVolume = map(volumeGain, -70, -5, 0, 65);  // Looks better to drop the negative number etc..
+      display.println(newVolume);                   // ..enter text
+      display.display();                            // Display!
+      delay(10);                                    // Such a short delay that it is "ok". Just a "debounce"  
+      adjustedVolumeTime = currentMillis;           // Take the time when the last volume adjustment was made
+      volumeAdjustedStep1 = true;                   // We are in this state now..
+      volumeAdjustedStep2 = false;                  // We are waiting for this state..  
     }
-    if (hexRes == "fd00ff"){          // Hex for volume down.. 
-      volumeGain--;                   // Same a for volume up
-      wTrig.masterGain(volumeGain);   
-      delay(10);              
-      hexRes = "000000";
+    if (hexRes == "fd00ff"){                                // Hex for volume down.. 
+      volumeGain--;                                         // Same a for volume up
+      if (volumeGain <= minVolume) volumeGain = minVolume;  // Do not exceed the min volume
+      wTrig.masterGain(volumeGain);                         // Adjust volume..   
+      
+      hexRes = "000000";                            // In preparation for the next IR code
+      display.stopscroll();                         // Stop any scrolling of the screen
+      display.clearDisplay();                       // Clear the buffer 
+      display.setTextSize(4);                       // Set the text size
+      display.setTextColor(WHITE);                  // ..and color
+      display.setCursor(40,5);                      // ..and location
+      newVolume = map(volumeGain, -70, -5, 0, 65);  // Looks better to drop the negative number etc..
+      display.println(newVolume);                   // ..enter text
+      display.display();                            // Display!
+      delay(10);                                    // Such a short delay that it is "ok". Just a "debounce"  
+      adjustedVolumeTime = currentMillis;           // Take the time when the last volume adjustment was made
+      volumeAdjustedStep1 = true;                   // We are in this state now..
+      volumeAdjustedStep2 = false;                  // We are waiting for this state..      
     }
-    if (hexRes == "fd807f"){                    // Hex for Play / Pause
-       if (paused == false){                        // We were unpaused, but the button was pressed..start pausing!
+    if (hexRes == "fd807f"){                        // Hex for Play / Pause
+      if (paused == false){                         // We were unpaused, but the button was pressed..start pausing!
+        display.stopscroll();                       // Stop any scrolling of the screen
+        delay(1);
+        display.clearDisplay();                     // Clear the buffer
+        display.display();                          // Display! 
+        delay(1);
         analogWrite(atatCockpit, 0);                // Light the ATAT cockpit
         SoftPWMSet(snowspeederEng0, 0);             // Light the Snowspeeder engines
         SoftPWMSet(snowspeederEng1, 0);             // ------ '' ------
@@ -236,7 +284,14 @@ void loop() {
         } 
         audioamp.enableChannel(false, false);       // Turn off both channels using I2C
         paused = true;                              // We are now paused.. 
-
+        display.clearDisplay();                     // Clear the buffer
+        display.setTextSize(3);                     // Set the text size
+        display.setTextColor(WHITE);                // ..and color
+        display.setCursor(12,5);                    // ..and location
+        display.println("PAUSED");                  // ..enter text
+        display.display();                          // Display!
+        delay(1);
+        previousBlink = currentMillis;
       }else if (paused == true){                    // We were paused, but the button was pressed..start unapusing, get the show on the road!
         analogWrite(atatCockpit, 15);               // Light the ATAT cockpit
         SoftPWMSet(snowspeederEng0, 10);            // Light the Snowspeeder engines
@@ -252,21 +307,21 @@ void loop() {
       hexRes = "000000";     
     }
     if (hexRes == "fd08f7"){                        // Hex for 1
-       if (toggledAudio == true){                  // We were unpaused, but the button was pressed..start pausing!
+       if (toggledAudio == true){                   // We were unpaused, but the button was pressed..start pausing!
         volumeGain_old = volumeGain;                // Save the old volume setting
         for (int i=volumeGain; i >= -70; i--){      // -70 is total silence..
           wTrig.masterGain(i);                      // Set the master gain
           delay(10);                                // Such a short delay that it is "ok". Just a "debounce"
         } 
         audioamp.enableChannel(false, false);       // Turn off both channels using I2C
-        toggledAudio = false;                              // We are now paused.. 
-      }else if (toggledAudio == false){                    // We were paused, but the button was pressed..start unapusing, get the show on the road!
+        toggledAudio = false;                       // We are now paused.. 
+      }else if (toggledAudio == false){             // We were paused, but the button was pressed..start unapusing, get the show on the road!
         audioamp.enableChannel(true, true);         // Turn on both channels using I2C      
         for (int i=-70; i <= volumeGain_old; i++){  // Increase the volume back to the old setting  
           wTrig.masterGain(i);                      // Set the master gain
           delay(10);                                // Such a short delay that it is "ok". Just a "debounce"
         } 
-        toggledAudio = true;                             // We are now unpaused.. 
+        toggledAudio = true;                        // We are now unpaused.. 
       } 
       hexRes = "000000";     
     }
@@ -297,21 +352,76 @@ void loop() {
   * fd58a7 9
 */
   // END - IR Receiver Code
-  
-  // Time since starting..this is used all over the place
-  unsigned long currentMillis = millis();
 
-  // Start Scrolling
-  if (scroll == false){
-    if (currentMillis - scrollingTemp >= 5000) {   	// Basically means we wait 5 seconds before starting to scroll.. 
-      scrollingTemp = currentMillis;               	// Storing the time we did this
-      display.startscrollright(0x00, 0x0F);					// Scroll screen contents to the right!
-      scroll = true;
+  // START - OLED Animations
+  // START - Flashing Pause
+  if (paused == true){
+    if (currentMillis - previousBlink >= 1500) {    // Basically means we wait 5 seconds before starting to scroll.. 
+      previousBlink = currentMillis;                // Storing the time we did this
+      if (blinker == false){                        // Screen is blank, display something
+        display.clearDisplay();                     // Clear the buffer 
+        display.setTextSize(3);                     // Set the text size
+        display.setTextColor(WHITE);                // ..and color
+        display.setCursor(12,5);                    // ..and location
+        display.println("PAUSED");                  // ..enter text
+        display.display();                          // Display!
+        delay(1);                                   // Guessing this is for "debouncing" the command sent to the display
+        blinker = true;                             // Switch states, make the screen blank on the next interval
+      }else{                                        // Screen is not blank, blank it
+        display.clearDisplay();                     // Clear the buffer
+        display.display();                          // Display!
+        delay(1);                                   // Guessing this is for "debouncing" the command sent to the display
+        blinker = false;                            // Switch states, make the screen non-blank on the next interval
+      }
     }  
   }
-  // END Scrolling
 
-  if (paused == false){ // false = not paused
+  // Return to normal..
+  if (paused == false && previousPause == true){    // If we are not paused, but we were paused last loop..
+    asYouWere = true;                               // Set as you were state..
+    wasPausedTime = currentMillis;                  // Get the time now
+    volumeAdjustedStep1 = false;                    // Some light house keeping in case we paused while adjusting volume  
+    volumeAdjustedStep2 = false;                    // Some light house keeping in case we paused while adjusting volume 
+    description();                                  // Display the text
+  }
+
+  if (asYouWere == true && paused != true){         // If as you were has been set, and we are not paused
+    if (currentMillis - wasPausedTime >= 5000) {    // Basically means we wait 5 seconds before starting to scroll.. 
+      display.startscrollright(0x00, 0x0F);         // Scroll screen contents to the right!
+      asYouWere = false;                            // Reset the as you were state..we are as we were.. 
+    }
+  }
+  // END - Flashing Pause
+
+  // START - Volume Was Adjusted
+  if (volumeAdjustedStep1 == true && paused != true){ // If the volume was just adjusted, and we are non paused..
+    if (currentMillis - adjustedVolumeTime >= 2000){  // Wait 2 seconds..
+      volumeAdjustedStep2 = true;                     // Set the next state to enter..
+      volumeAdjustedStep1 = false;                    // Done with the current state
+      description();                                  // Remove volume indicator, and display text
+    }
+  }
+  if (volumeAdjustedStep2 == true && paused != true){ // If we are in the second step after volume was adjusted, still not paused
+    if (currentMillis - adjustedVolumeTime >= 7000){  // ..and we have waited another 5 (2+5=7) seconds
+      display.startscrollright(0x00, 0x0F);           // Scroll screen contents to the right!
+      volumeAdjustedStep2 = false;                    // Done with the current state..back to normal
+    }
+  }
+  // END - Volume Was Adjusted
+
+  // START - Scrolling Screen After Boot
+  if (scroll == false && paused != true){                     // We just booted up and are not scrolling yet, and we are not paused.. 
+    if ((currentMillis >= 5000) && (currentMillis <= 5050)) { // If we are here between 5 seconds and 5.05 seconds, start scrolling
+                                                              // The idea is that if we press pause immedately on boot, this time will come
+                                                              // and go, but we will not be immedately scrolling the screen when we unpause..
+      display.startscrollright(0x00, 0x0F);                   // Scroll screen contents to the right!
+      scroll = true;                                          // We are scrolling, no need to enter this if statement again in that case.. 
+    }  
+  }
+  // END - Scrolling Screen After Boot
+  // END - OLED Animations
+
+  if (paused == false){   // false = not paused
 
     // START - Code only executed the very first time through the loop
     if (started == false){              // If this is the first time then started = false
@@ -530,5 +640,7 @@ void loop() {
   }else if (paused == true) {           // If we are paused, go here.. 
     // do nothing..we are holding.. 
   }
-}
 
+  // Get the pause state
+  previousPause = paused;
+}
