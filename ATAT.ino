@@ -1,5 +1,5 @@
 /* 
- *  AT-AT Gun'n'Walk V.11
+ *  AT-AT Gun'n'Walk V.12
  * 
  * Arduino Sketch for controlling lights and sounds in Hoth Diorama
  * by Ole Andre aka @oleshobbyblog www.oleandre.net
@@ -48,7 +48,6 @@
 // Include some libraries we need :) 
 #include <SoftPWM.h>          // Software PWM due to too few analog write pins
 #include <wavTrigger.h>       // For controlling the WAV Trigger via serial
-#include <SPI.h>              // Used for I2C communications
 #include <Wire.h>             // Used for I2C communications
 #include <Adafruit_GFX.h>     // For graphics on the display  
 #include <Adafruit_SSD1306.h> // The OLED library (defaults to the 128x32 size, must change if I go for bigger screen size)
@@ -161,10 +160,7 @@ static const unsigned char PROGMEM First_Galactic_Empire_emblem_bits[] = {
 0x00, 0xF9, 0x9F, 0x00, 0x00, 0x1F, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-void setup() {
-  
-  //Serial.begin(9600);   // Think we need this to print text to the display..maybe..hmm
-  
+void setup() {  
   SoftPWMBegin();       // Initiate SoftPWM, this allows "regular" pins to act as PWM pins. Very useful!
 
   // Define what pins are to be SoftPWM pins, and what their initial value will be
@@ -198,9 +194,9 @@ void setup() {
   irrecv.enableIRIn(); // Start the receiver
 
   // Some display code
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x32)
-  display.display();                          // Display the splash screen..
-//  delay(2000);                                // ..for two seconds.. 
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C for the 128x32
+  //display.display();                          // Display the splash screen..
+  //delay(2000);                                // ..for two seconds.. 
   description();
 }
 
@@ -643,4 +639,4 @@ void loop() {
 
   // Get the pause state
   previousPause = paused;
-}
+	}
