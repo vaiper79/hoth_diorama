@@ -214,6 +214,22 @@ void description(){
   delay(1);
 }
 
+void lightsOut(){                     // Make everything dark for the pause
+  analogWrite(atatCockpit, 0);               
+  SoftPWMSet(hlc0, 0);  
+  SoftPWMSet(hlc1, 0);
+  SoftPWMSet(snowspeederCannon0, 0);
+  SoftPWMSet(snowspeederCannon1, 0);
+  SoftPWMSet(explosion, 0);
+  SoftPWMSet(snowspeederEng0, 0);
+  SoftPWMSet(snowspeederEng1, 0);
+}
+void lightsOn(){                      // Some LEDs should be lit again after the pause
+  analogWrite(atatCockpit, 0);  
+  SoftPWMSet(snowspeederEng0, 0);
+  SoftPWMSet(snowspeederEng1, 0);
+}
+
 void loop() {
   // Time since boot..this is used all over the place
   unsigned long currentMillis = millis();
@@ -270,9 +286,7 @@ void loop() {
         display.clearDisplay();                     // Clear the buffer
         display.display();                          // Display! 
         delay(1);
-        analogWrite(atatCockpit, 0);                // Light the ATAT cockpit
-        SoftPWMSet(snowspeederEng0, 0);             // Light the Snowspeeder engines
-        SoftPWMSet(snowspeederEng1, 0);             // ------ '' ------
+        lightsOut();                                // Will this work?
         volumeGain_old = volumeGain;                // Save the old volume setting
         for (int i=volumeGain; i >= -70; i--){      // -70 is total silence..
           wTrig.masterGain(i);                      // Set the master gain
@@ -289,9 +303,7 @@ void loop() {
         delay(1);
         previousBlink = currentMillis;
       }else if (paused == true){                    // We were paused, but the button was pressed..start unapusing, get the show on the road!
-        analogWrite(atatCockpit, 15);               // Light the ATAT cockpit
-        SoftPWMSet(snowspeederEng0, 10);            // Light the Snowspeeder engines
-        SoftPWMSet(snowspeederEng1, 10);            // ------ '' ------ 
+        lightsOn();
         audioamp.enableChannel(true, true);         // Turn on both channels using I2C      
         for (int i=-70; i <= volumeGain_old; i++){  // Increase the volume back to the old setting  
           wTrig.masterGain(i);                      // Set the master gain
@@ -639,4 +651,6 @@ void loop() {
 
   // Get the pause state
   previousPause = paused;
-	}
+}
+
+
