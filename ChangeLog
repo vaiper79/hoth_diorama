@@ -9,6 +9,7 @@ Done/Ignored/Fixed (version numbers are internal for now):
 Version 12:
 - Removed SPI.h, no need for it
 - Tried 128x64 display, presumably too low on resources for proper operation
+- Made functions to turn off and on LEDs while paused
 
 Version 11: 
 - Added: 128x32 i2c OLED
