@@ -5,16 +5,16 @@ Remaining Items:
 - Consider a functionality where one can switch off elements.. Like isolate the ATAT or just the snow speeders.
 - Music mode..i.e. dialogue from the scene in the movie on top of the sounds, possibly turns he volume of the action down to hear the voice  of Luke.. See if I can get voice of Luke without other sounds..hmm..
 
-Done/Ignored/Fixed (version numbers are internal for now):
-Version 13:
-- Removed Snowspeeder engine LEDs, retasked for Snowspeeder cockpit lighting attempt
-- Created variables to control 1) snowspeeder cockpit lighting brightness adn 2) HLC brightness
-- Cleaned up some code, removed mentions of rotary encoder
+Done/Ignored/Fixed/Created/Removed/Tested (version numbers are internal for now):
+Version 13 (March 18th 2018):
+- Removed: Snowspeeder engine LEDs, retasked for Snowspeeder cockpit lighting attempt
+- Fixed: Created variables to control 1) snowspeeder cockpit lighting brightness adn 2) HLC brightness	
+- Fixed: Cleaned up some code, removed mentions of rotary encoder
 
 Version 12:
-- Removed SPI.h, no need for it
-- Tried 128x64 display, presumably too low on resources for proper operation
-- Made functions to turn off and on LEDs while paused
+- Removed: SPI.h, no need for it
+- Tested: 128x64 display, presumably too low on resources for proper operation
+- Created: Functions to turn off and on LEDs while paused
 
 Version 11: 
 - Added: 128x32 i2c OLED
