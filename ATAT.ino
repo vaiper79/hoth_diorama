@@ -1,5 +1,5 @@
-/* 
- *  AT-AT Gun'n'Walk V.12
+  /* 
+ *  AT-AT Gun'n'Walk V.13
  * 
  * Arduino Sketch for controlling lights and sounds in Hoth Diorama
  * by Ole Andre aka @oleshobbyblog www.oleandre.net
@@ -56,8 +56,8 @@
 
 // Defining up the pins we will be using :)
 // Pins used for I2C: A4/A5
-#define snowspeederEng0 A2    // SoftPWM, left engine
-#define snowspeederEng1 A3    // SoftPWM, right engine
+#define snowspeederCockpit1 A2    // SoftPWM, light in cockpit via FO
+#define snowspeederCockpit2 A3    // SoftPWM, light in cockpit via FO
 #define snowspeederCannon0 8  // SoftPWM, left cannon
 #define snowspeederCannon1 5  // SoftPWM, right cannon
 #define atatCockpit 6         // PWM, light in AT AT cockpit
@@ -137,13 +137,18 @@ Adafruit_SSD1306 display(OLED_RESET);
 IRrecv irrecv(RECV_PIN);  // Receiving IR sensor signals on this pin
 decode_results results;   // Returns the decoded results (decode_type, addres, value, bits..etc.. Referenced using i.e. "results.value"
 
-// Rotary Encoder, pressing the rotary encoder button = pause/unpause, rotating changes the volume
+// Volume Settings
 int maxVolume = -5;                 // Above this volume and we get crackling in the speakers..
 int minVolume = -70;                // Below this and it gets silly, the amp goes to -70..why would we need to go lower
 int volumeGain = -10;               // This is the default setting of dB from which we always start
 int volumeGain_old = 0;             // Used to store the old volume setting when pausing so 
                                     // we know where to return to when unpausing
 int newVolume = 0;                  // For mapping to "nicer" numbers
+
+// LED brightnesses
+int HLCBright = 200;            // Initially 120, too low
+int ATATCockpitBright = 100;        // Initially 15, way too low
+int SnowSpeederCockpitBright = 100;  // Initial value, most likely too low
 
 // Graphics Department.. 
 // Empire Emblem
@@ -169,16 +174,16 @@ void setup() {
   SoftPWMSet(snowspeederCannon0, 0);
   SoftPWMSet(snowspeederCannon1, 0);
   SoftPWMSet(explosion, 0);
-  SoftPWMSet(snowspeederEng0, 0);
-  SoftPWMSet(snowspeederEng1, 0);
+  SoftPWMSet(snowspeederCockpit1, 0);
+  SoftPWMSet(snowspeederCockpit2, 0);
 
   // Define the speed with which the LEDs will fade in, and fade out, respectively. 
   SoftPWMSetFadeTime(hlc0, 10, 50);
   SoftPWMSetFadeTime(hlc1, 10, 50);
   SoftPWMSetFadeTime(snowspeederCannon0, 10, 50);
   SoftPWMSetFadeTime(snowspeederCannon1, 10, 50);
-  SoftPWMSetFadeTime(snowspeederEng0, 10, 10);
-  SoftPWMSetFadeTime(snowspeederEng1, 10, 10);
+  SoftPWMSetFadeTime(snowspeederCockpit1, 10, 10);
+  SoftPWMSetFadeTime(snowspeederCockpit2, 10, 10);
   SoftPWMSetFadeTime(explosion, 10, 1000);        // The explosion looks better if it takes a while to die down. 
   
   // WAV Trigger startup
@@ -221,13 +226,13 @@ void lightsOut(){                     // Make everything dark for the pause
   SoftPWMSet(snowspeederCannon0, 0);
   SoftPWMSet(snowspeederCannon1, 0);
   SoftPWMSet(explosion, 0);
-  SoftPWMSet(snowspeederEng0, 0);
-  SoftPWMSet(snowspeederEng1, 0);
+  SoftPWMSet(snowspeederCockpit1, 0);
+  SoftPWMSet(snowspeederCockpit2, 0);
 }
 void lightsOn(){                      // Some LEDs should be lit again after the pause
   analogWrite(atatCockpit, 0);  
-  SoftPWMSet(snowspeederEng0, 0);
-  SoftPWMSet(snowspeederEng1, 0);
+  SoftPWMSet(snowspeederCockpit1, 0);
+  SoftPWMSet(snowspeederCockpit2, 0);
 }
 
 void loop() {
@@ -432,10 +437,11 @@ void loop() {
   if (paused == false){   // false = not paused
 
     // START - Code only executed the very first time through the loop
-    if (started == false){              // If this is the first time then started = false
-      analogWrite(atatCockpit, 15);     // Light the ATAT cockpit
-      SoftPWMSet(snowspeederEng0, 10);  // Light the Snowspeeder engines
-      SoftPWMSet(snowspeederEng1, 10);  // ------ '' ------
+    if (started == false){                          // If this is the first time then started = false
+      analogWrite(atatCockpit, ATATCockpitBright);  // Light the ATAT cockpit
+      SoftPWMSet(snowspeederCockpit1, SnowSpeederCockpitBright);              // Light the Snowspeeder engines
+      SoftPWMSet(snowspeederCockpit2, SnowSpeederCockpitBright);              // ------ '' ------
+      
       //wTrig.stopAllTracks();          // Was used for a period when I tried to halt the sequence.
                                         // Will keep this in case I find I want to add an on/off feature..
       wTrig.masterGain(volumeGain);     // Sets the master gain to whatever is set (set low during dev to 
@@ -545,7 +551,7 @@ void loop() {
         previousATATShotMillis = currentMillis;                             // Storing the time this happened last, so that the next will happen
                                                                             // rndmATATShotMillis after this point in time. 
         wTrig.trackPlayPoly(4);                                             // Play track 4, the single ATAT laser sound
-        SoftPWMSet(hlc0, 120);                                              // Light up LED on pin hcl0 to a value of 120
+        SoftPWMSet(hlc0, HLCBright);                                              // Light up LED on pin hcl0 to a value of 120
         ATATShot1 = true;                                                   // We have fired the first HLC..now to fire the next.. 
       }
     }
@@ -558,7 +564,7 @@ void loop() {
       if (currentMillis - previousATATShotMillis >= rndmATATSpacerMillis) {   // Basically means we still have to wait rndmATATSpacerMillis amount of time before doing this. 
         previousATATShotMillis = currentMillis;                               // Storing the time we did this
         wTrig.trackPlayPoly(4);                                               
-        SoftPWMSet(hlc1, 120);  
+        SoftPWMSet(hlc1, HLCBright);  
         ATATShot2 = true;                                                     // We're done firing the second HLC..moving on
       }   
     }
