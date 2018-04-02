@@ -1,5 +1,5 @@
   /* 
- *  AT-AT Gun'n'Walk V.13
+ *  AT-AT Gun'n'Walk V.14
  * 
  * Arduino Sketch for controlling lights and sounds in Hoth Diorama
  * by Ole Andre aka @oleshobbyblog www.oleandre.net
@@ -14,7 +14,6 @@
  * - IR Sensor: https://github.com/adafruit/Adafruit-NEC-remote-control-library
  * 
  * Datasheets: 
- * - Mono amplifier: https://cdn-shop.adafruit.com/datasheets/PAM8302A.pdf
  * - Stereo amplifier: https://cdn-shop.adafruit.com/datasheets/TPA2016D2.pdf
  * - WAV Trigger: https://cdn.sparkfun.com/datasheets/Widgets/STM32F405RGT6.pdf
  * - Pro Trinket 5V: https://cdn-shop.adafruit.com/datasheets/ATMEGA328P.pdf
@@ -31,18 +30,17 @@
  * - IR sensor code: Ken Shirriff (http://arcfn.com & http://z3t0.github.io/Arduino-IRremote/), TRULY a lifesaver!
  *                    (I had to swap to timer 1 in boarddefs.h due to a conflict with the SoftPWM library)
  * - User sterretje of the Arduino forums: https://forum.arduino.cc/index.php?topic=454873.0 
- * 
- *                    
+ *                     
  * Parts list:
  *  1x IR Sensor: http://www.adafruit.com/products/157
  *  1x Remote control: http://www.adafruit.com/products/389
- *  1x WAV Trigger:
- *  1x Pro Trinket 5V:
- *  1x Stereo amplifier:
- *  2x Speakers:
- *  1x 128x32 i2c OLED: 
- *  LEDs: 
- *  Resistors and wires
+ *  1x WAV Trigger: https://www.sparkfun.com/products/13660
+ *  1x Pro Trinket 5V: https://www.adafruit.com/product/2000
+ *  1x Stereo amplifier: https://www.adafruit.com/product/1712
+ *  2x Speakers: Some store in Nipponbashi's Denden Town, Osaka, Japan, but this has the same specs: https://www.sparkfun.com/products/9151
+ *  1x 128x32 i2c OLED: https://www.adafruit.com/product/931
+ *  LEDs: https://www.modeltrainsoftware.com/smd-chip-leds.html and https://www.modeltrainsoftware.com/bl-214f.html 
+ *  Resistors and wires: Various sources, Adafruit, Model Train Software (same as the LEDs) and the local electronics store. 
  */
 
 // Include some libraries we need :) 
@@ -56,10 +54,10 @@
 
 // Defining up the pins we will be using :)
 // Pins used for I2C: A4/A5
-#define snowspeederCockpit1 A2    // SoftPWM, light in cockpit via FO
-#define snowspeederCockpit2 A3    // SoftPWM, light in cockpit via FO
 #define snowspeederCannon0 8  // SoftPWM, left cannon
 #define snowspeederCannon1 5  // SoftPWM, right cannon
+#define snowspeederCannon2 A2    // SoftPWM, light in cockpit via FO
+#define snowspeederCannon3 A3    // SoftPWM, light in cockpit via FO
 #define atatCockpit 6         // PWM, light in AT AT cockpit
 #define hlc0 11               // Soft PWM if necessary, left HLC
 #define hlc1 3                // Soft PWM if necessary, right HLC
@@ -72,10 +70,17 @@
 bool rndmATATShot = false;          // false if no random timer set, true when waiting to execute
 bool rndmATATExplosion = false;     // false if no random timer set, true when waiting to execute
 bool rndmATATShotSpacer = false;    // false if no random timer set, true when waiting to execute
-bool rndmSpeederFlight = false;     // false if no random timer set, true when waiting to execute
-bool rndmSpeederSpacer = false;     // false if no random timer set, true when waiting to execute
-bool rndmSpeederShot = false;       // false if no random timer set, true when waiting to execute
-bool rndmSpeederShotSpacer = false; // false if no random timer set, true when waiting to execute
+
+bool rndmSpeederFlight_a = false;     // false if no random timer set, true when waiting to execute
+bool rndmSpeederSpacer_a = false;     // false if no random timer set, true when waiting to execute
+bool rndmSpeederShot_a = false;       // false if no random timer set, true when waiting to execute
+bool rndmSpeederShotSpacer_a = false; // false if no random timer set, true when waiting to execute
+
+bool rndmSpeederFlight_b = false;     // false if no random timer set, true when waiting to execute
+bool rndmSpeederSpacer_b = false;     // false if no random timer set, true when waiting to execute
+bool rndmSpeederShot_b = false;       // false if no random timer set, true when waiting to execute
+bool rndmSpeederShotSpacer_b = false; // false if no random timer set, true when waiting to execute
+
 bool doVoiceOrNot = false;          // False if we aren't supposed to talk.. 
 
 // Some bools to control various states
@@ -94,8 +99,10 @@ bool started = false;             // True = started, False = "First run, do this
 // always move on to the next step. 
 bool ATATShot1 = false; // False means we have not "been" there yet, true means we have and to "move on to the next"
 bool ATATShot2 = false; // False means we have not "been" there yet, true means we have and to "move on to the next"
-bool speeder1 = false;  // False means we have not "been" there yet, true means we have and to "move on to the next"
-bool speeder2 = false;  // False means we have not "been" there yet, true means we have and to "move on to the next"
+bool speeder1_a = false;  // False means we have not "been" there yet, true means we have and to "move on to the next"
+bool speeder2_a = false;  // False means we have not "been" there yet, true means we have and to "move on to the next"
+bool speeder1_b = false;  // False means we have not "been" there yet, true means we have and to "move on to the next"
+bool speeder2_b = false;  // False means we have not "been" there yet, true means we have and to "move on to the next"
 
 // Create some variables for randomization and timimg
 byte ATATShotLength = 20;                   // The length of the ATAT laser cannon flash
@@ -104,23 +111,38 @@ unsigned long rndmATATExplosionMillis = 0;  // Time between last ATAT HCL firing
 unsigned long rndmATATSpacerMillis = 0;     // How far between the AT AT HLC shots
 unsigned long previousATATShotMillis = 0;   // This is the timer for the ATAT firing sequences, 
                                             // used to ensure that we trigger things at the right times
-unsigned long rndmSpeederMillis = 0;            // The time between each Snowspeeder sequence
-unsigned long rndmSpeederShotMillis = 0;        // The interval for the snowspeeder shots
-unsigned long rndmSpeederSpacerMillis = 0;      // The time between first/second Snowspeeder
-unsigned long rndmSpeederShotSpacerMillis = 0;  // The time between the Snowspeeder shots
-unsigned long spacerSpeederShotMillis = 0;      // How far between the snowspeeders
-unsigned long previousSpeederMillis = 0;        // This is the timer for the snowspeeder sequences
+unsigned long rndmSpeederMillis_a = 0;            // The time between each Snowspeeder sequence
+unsigned long rndmSpeederShotMillis_a = 0;        // The interval for the snowspeeder shots
+unsigned long rndmSpeederSpacerMillis_a = 0;      // The time between first/second Snowspeeder
+unsigned long rndmSpeederShotSpacerMillis_a = 0;  // The time between the Snowspeeder shots
+unsigned long spacerSpeederShotMillis_a = 0;      // How far between the snowspeeders
+unsigned long previousSpeederMillis_a = 0;        // This is the timer for the snowspeeder sequences
+
+unsigned long rndmSpeederMillis_b = 0;            // The time between each Snowspeeder sequence
+unsigned long rndmSpeederShotMillis_b = 0;        // The interval for the snowspeeder shots
+unsigned long rndmSpeederSpacerMillis_b = 0;      // The time between first/second Snowspeeder
+unsigned long rndmSpeederShotSpacerMillis_b = 0;  // The time between the Snowspeeder shots
+unsigned long spacerSpeederShotMillis_b = 0;      // How far between the snowspeeders
+unsigned long previousSpeederMillis_b = 0;        // This is the timer for the snowspeeder sequences
+
 unsigned long startScroll = 0;                  // Used for the scrolling that starts automatically after boot          
 unsigned long previousBlink = 0;                // Used for the blinking pause indicator
 unsigned long wasPausedTime = 0;                // We want scrolling to resume after 
 unsigned long adjustedVolumeTime = 0;           // Also after adjusting the volume "stuff" should happen
 
 byte explodeOrNot;    // Used for a kind of dice roll to decide if the lasers hit, to generate an explosion
-byte oneOrTwo;        // Two or one snowspeeder will fly past?
-byte shootOrNot;      // Do the snowspeeder fire or not?
-byte numberOfShots;   // How many speeder laser shots
-byte speederShot = 0; // Count what shot we are at      
-byte fired = 0;       // Used to ensure we enter the Snowspeeder firing sequence correctly
+
+byte oneOrTwo_a;        // Two or one snowspeeder will fly past?
+byte shootOrNot_a;      // Do the snowspeeder fire or not?
+byte numberOfShots_a;   // How many speeder laser shots
+byte speederShot_a = 0; // Count what shot we are at      
+byte fired_a = 0;       // Used to ensure we enter the Snowspeeder firing sequence correctly
+
+byte oneOrTwo_b;        // Two or one snowspeeder will fly past?
+byte shootOrNot_b;      // Do the snowspeeder fire or not?
+byte numberOfShots_b;   // How many speeder laser shots
+byte speederShot_b = 0; // Count what shot we are at      
+byte fired_b = 0;       // Used to ensure we enter the Snowspeeder firing sequence correctly
 
 String hexRes = "000000"; // I decided to go for the value returned by the IR sensor, but in hex. Using this to store the hex value..
 
@@ -148,7 +170,6 @@ int newVolume = 0;                  // For mapping to "nicer" numbers
 // LED brightnesses
 int HLCBright = 200;            // Initially 120, too low
 int ATATCockpitBright = 100;        // Initially 15, way too low
-int SnowSpeederCockpitBright = 100;  // Initial value, most likely too low
 
 // Graphics Department.. 
 // Empire Emblem
@@ -173,17 +194,17 @@ void setup() {
   SoftPWMSet(hlc1, 0);
   SoftPWMSet(snowspeederCannon0, 0);
   SoftPWMSet(snowspeederCannon1, 0);
+  SoftPWMSet(snowspeederCannon2, 0);
+  SoftPWMSet(snowspeederCannon3, 0);
   SoftPWMSet(explosion, 0);
-  SoftPWMSet(snowspeederCockpit1, 0);
-  SoftPWMSet(snowspeederCockpit2, 0);
 
   // Define the speed with which the LEDs will fade in, and fade out, respectively. 
   SoftPWMSetFadeTime(hlc0, 10, 50);
   SoftPWMSetFadeTime(hlc1, 10, 50);
   SoftPWMSetFadeTime(snowspeederCannon0, 10, 50);
   SoftPWMSetFadeTime(snowspeederCannon1, 10, 50);
-  SoftPWMSetFadeTime(snowspeederCockpit1, 10, 10);
-  SoftPWMSetFadeTime(snowspeederCockpit2, 10, 10);
+  SoftPWMSetFadeTime(snowspeederCannon2, 10, 50);
+  SoftPWMSetFadeTime(snowspeederCannon3, 10, 50);
   SoftPWMSetFadeTime(explosion, 10, 1000);        // The explosion looks better if it takes a while to die down. 
   
   // WAV Trigger startup
@@ -225,14 +246,12 @@ void lightsOut(){                     // Make everything dark for the pause
   SoftPWMSet(hlc1, 0);
   SoftPWMSet(snowspeederCannon0, 0);
   SoftPWMSet(snowspeederCannon1, 0);
+  SoftPWMSet(snowspeederCannon2, 0);
+  SoftPWMSet(snowspeederCannon3, 0);
   SoftPWMSet(explosion, 0);
-  SoftPWMSet(snowspeederCockpit1, 0);
-  SoftPWMSet(snowspeederCockpit2, 0);
 }
 void lightsOn(){                      // Some LEDs should be lit again after the pause
   analogWrite(atatCockpit, 0);  
-  SoftPWMSet(snowspeederCockpit1, 0);
-  SoftPWMSet(snowspeederCockpit2, 0);
 }
 
 void loop() {
@@ -439,8 +458,6 @@ void loop() {
     // START - Code only executed the very first time through the loop
     if (started == false){                          // If this is the first time then started = false
       analogWrite(atatCockpit, ATATCockpitBright);  // Light the ATAT cockpit
-      SoftPWMSet(snowspeederCockpit1, SnowSpeederCockpitBright);              // Light the Snowspeeder engines
-      SoftPWMSet(snowspeederCockpit2, SnowSpeederCockpitBright);              // ------ '' ------
       
       //wTrig.stopAllTracks();          // Was used for a period when I tried to halt the sequence.
                                         // Will keep this in case I find I want to add an on/off feature..
@@ -470,7 +487,7 @@ void loop() {
     }
     // END - Code only executed the very first time through the loop
 
-    // START - Random generators
+    // START - "Random" generators
     if (rndmATATShot == false){                     // Basically check if new random timer should be calculated
       rndmATATShotMillis = random(1500, 4000);      // Pseudo random, will do the trick for this
                                                     // Actually it has turned out to be a good thing for troubleshooting
@@ -488,24 +505,40 @@ void loop() {
       rndmATATExplosion = true;
     }
   
-    if (rndmSpeederFlight == false){
-      oneOrTwo = random(10,15);                       // Should the snowspeeder flight be a one of two ship formation?
-      shootOrNot = random(15,20);                     // Should they fire or not?
-      numberOfShots = random(1,4);                    // How many shots? From 1 to and including 3
-      rndmSpeederShotSpacerMillis = random(100,200);  // Time between first two salvos
-      rndmSpeederMillis = random(1000, 5000);         // The snowspeeder flight interval
-      rndmSpeederFlight = true;
+    if (rndmSpeederFlight_a == false){
+      oneOrTwo_a = random(10,15);                       // Should the snowspeeder flight be a one of two ship formation?
+      shootOrNot_a = random(15,20);                     // Should they fire or not?
+      numberOfShots_a = random(1,4);                    // How many shots? From 1 to and including 3
+      rndmSpeederShotSpacerMillis_a = random(100,200);  // Time between first two salvos
+      rndmSpeederMillis_a = random(1000, 5000);         // The snowspeeder flight interval
+      rndmSpeederFlight_a = true;
     }
-    if (rndmSpeederSpacer == false){
-      rndmSpeederSpacerMillis = random(500, 1000);    // The time between the snowspeeders in each flight. From 0.5 to 1 second apart.
-      rndmSpeederSpacer = true;
+    if (rndmSpeederSpacer_a == false){
+      rndmSpeederSpacerMillis_a = random(500, 1000);    // The time between the snowspeeders in each flight. From 0.5 to 1 second apart.
+      rndmSpeederSpacer_a = true;
     }
-    if (rndmSpeederShot == false){
-      rndmSpeederShotMillis = random(30, 60);         // The time between each snowspeeder shot, from 30 to 60 ms. 
-      rndmSpeederShot = true;
+    if (rndmSpeederShot_a == false){
+      rndmSpeederShotMillis_a = random(30, 60);         // The time between each snowspeeder shot, from 30 to 60 ms. 
+      rndmSpeederShot_a = true;
     }
-    
-    // END - Random generators
+
+    if (rndmSpeederFlight_b == false){
+      oneOrTwo_b = random(10,15);                       // Should the snowspeeder flight be a one of two ship formation?
+      shootOrNot_b = random(15,20);                     // Should they fire or not?
+      numberOfShots_b = random(1,4);                    // How many shots? From 1 to and including 3
+      rndmSpeederShotSpacerMillis_b = random(100,200);  // Time between first two salvos
+      rndmSpeederMillis_b = random(1000, 5000);         // The snowspeeder flight interval
+      rndmSpeederFlight_b = true;
+    }
+    if (rndmSpeederSpacer_b == false){
+      rndmSpeederSpacerMillis_b = random(500, 1000);    // The time between the snowspeeders in each flight. From 0.5 to 1 second apart.
+      rndmSpeederSpacer_b = true;
+    }
+    if (rndmSpeederShot_b == false){
+      rndmSpeederShotMillis_b = random(30, 60);         // The time between each snowspeeder shot, from 30 to 60 ms. 
+      rndmSpeederShot_b = true;
+    }
+    // END - "Random" generators
 
     /* I have decided to do the ATAT and Snowspeeders as separate entities that exist in code independent of each other. Multitasking. 
     * This is where the "animation" takes place, timing all the events etc. 
@@ -591,72 +624,132 @@ void loop() {
                                                                                             // 20 ms is fine
     // END - AT AT Firing + Explosion
 
-    // START - Speeder flying and firing
-    if(speeder1 == false){
-      if (currentMillis - previousSpeederMillis >= rndmSpeederMillis) {  
-        previousSpeederMillis = currentMillis; 
+    // START - Speeder flying and firing A
+    if(speeder1_a == false){
+      if (currentMillis - previousSpeederMillis_a >= rndmSpeederMillis_a) {  
+        previousSpeederMillis_a = currentMillis; 
         // Snowspeeder flyby = Files 4 - 7
         int y = random (5,8); 
         wTrig.trackPlayPoly(y); 
-        speeder1 = true;
+        speeder1_a = true;
       }
     }
-    if (speeder2 == false && speeder1 == true){ 
-      if (oneOrTwo > 12){  
-        if (currentMillis - previousSpeederMillis >= rndmSpeederSpacerMillis) {  
-          previousSpeederMillis = currentMillis;
+    if (speeder2_a == false && speeder1_a == true){ 
+      if (oneOrTwo_a > 12){  
+        if (currentMillis - previousSpeederMillis_a >= rndmSpeederSpacerMillis_a) {  
+          previousSpeederMillis_a = currentMillis;
           // Snowspeeder flyby = Files 4 - 7
           int z = random (5,8);          
           wTrig.trackPlayPoly(z); 
-          speeder2 = true;
+          speeder2_a = true;
         } 
       }else{
-        speeder2 = true;
+        speeder2_a = true;
       }
     }
-    if (speeder1 == true && speeder2 == true){
-      if (currentMillis - previousSpeederMillis >= rndmSpeederShotMillis) {  
-        if (shootOrNot <= 17){
-          previousSpeederMillis = currentMillis;
-          while(speederShot<numberOfShots){
+    if (speeder1_a == true && speeder2_a == true){
+      if (currentMillis - previousSpeederMillis_a >= rndmSpeederShotMillis_a) {  
+        if (shootOrNot_a <= 17){
+          previousSpeederMillis_a = currentMillis;
+          while(speederShot_a<numberOfShots_a){
             currentMillis = millis();       // Get time while inside the while loop.. 
-            if ((currentMillis - previousSpeederMillis >= rndmSpeederShotSpacerMillis) && (fired == 0)) {
-              previousSpeederMillis = currentMillis;
+            if ((currentMillis - previousSpeederMillis_a >= rndmSpeederShotSpacerMillis_a) && (fired_a == 0)) {
+              previousSpeederMillis_a = currentMillis;
               wTrig.trackPlayPoly(8);
-              if ((speederShot % 2) == 0) SoftPWMSet(snowspeederCannon0, 120); // Even
-              if (speederShot % 2) SoftPWMSet(snowspeederCannon1, 120); // Odd
-              rndmSpeederShotSpacerMillis = random(100,300);
-              fired = 1;    
+              if ((speederShot_a % 2) == 0) SoftPWMSet(snowspeederCannon0, 120); // Even
+              if (speederShot_a % 2) SoftPWMSet(snowspeederCannon1, 120); // Odd
+              rndmSpeederShotSpacerMillis_a = random(100,300);
+              fired_a = 1;    
             }
-            if ((currentMillis - previousSpeederMillis >= 20) && (fired == 1)) {
-               if ((speederShot % 2) == 0) SoftPWMSet(snowspeederCannon0, 0);   
-               if (speederShot % 2) SoftPWMSet(snowspeederCannon1, 0); 
-               speederShot++;
-               fired = 0;
+            if ((currentMillis - previousSpeederMillis_a >= 20) && (fired_a == 1)) {
+               if ((speederShot_a % 2) == 0) SoftPWMSet(snowspeederCannon0, 0);   
+               if (speederShot_a % 2) SoftPWMSet(snowspeederCannon1, 0); 
+               speederShot_a++;
+               fired_a = 0;
             }
           }
-          rndmSpeederSpacer = false;
-          rndmSpeederFlight = false;
-          rndmSpeederShot = false;
-          speeder1 = false;      
-          speeder2 = false;
-          speederShot = 0;          // Reset for new run
-        }else if (shootOrNot > 17){
-          rndmSpeederSpacer = false;
-          rndmSpeederFlight = false;
-          rndmSpeederShot = false;
-          speeder1 = false;      
-          speeder2 = false;
+          rndmSpeederSpacer_a = false;
+          rndmSpeederFlight_a = false;
+          rndmSpeederShot_a = false;
+          speeder1_a = false;      
+          speeder2_a = false;
+          speederShot_a = 0;          // Reset for new run
+        }else if (shootOrNot_a > 17){
+          rndmSpeederSpacer_a = false;
+          rndmSpeederFlight_a = false;
+          rndmSpeederShot_a = false;
+          speeder1_a = false;      
+          speeder2_a = false;
         }
       }
     }
-    // END - Speeder flying and firing
+    // END - Speeder flying and firing A
+
+    // START - Speeder flying and firing B
+    if(speeder1_b == false){
+      if (currentMillis - previousSpeederMillis_b >= rndmSpeederMillis_b) {  
+        previousSpeederMillis_b = currentMillis; 
+        // Snowspeeder flyby = Files 4 - 7
+        int y = random (5,8); 
+        wTrig.trackPlayPoly(y); 
+        speeder1_b = true;
+      }
+    }
+    if (speeder2_b == false && speeder1_b == true){ 
+      if (oneOrTwo_b > 12){  
+        if (currentMillis - previousSpeederMillis_b >= rndmSpeederSpacerMillis_b) {  
+          previousSpeederMillis_b = currentMillis;
+          // Snowspeeder flyby = Files 4 - 7
+          int z = random (5,8);          
+          wTrig.trackPlayPoly(z); 
+          speeder2_b = true;
+        } 
+      }else{
+        speeder2_b = true;
+      }
+    }
+    if (speeder1_b == true && speeder2_b == true){
+      if (currentMillis - previousSpeederMillis_b >= rndmSpeederShotMillis_b) {  
+        if (shootOrNot_b <= 17){
+          previousSpeederMillis_b = currentMillis;
+          while(speederShot_b<numberOfShots_b){
+            currentMillis = millis();         // Get time while inside the while loop.. 
+            if ((currentMillis - previousSpeederMillis_b >= rndmSpeederShotSpacerMillis_b) && (fired_b == 0)) {
+              previousSpeederMillis_a = currentMillis;
+              wTrig.trackPlayPoly(8);
+              if ((speederShot_b % 2) == 0) SoftPWMSet(snowspeederCannon2, 120); // Even
+              if (speederShot_b % 2) SoftPWMSet(snowspeederCannon3, 120); // Odd
+              rndmSpeederShotSpacerMillis_b = random(100,300);
+              fired_b = 1;    
+            }
+            if ((currentMillis - previousSpeederMillis_b >= 20) && (fired_b == 1)) {
+               if ((speederShot_b % 2) == 0) SoftPWMSet(snowspeederCannon2, 0);   
+               if (speederShot_b % 2) SoftPWMSet(snowspeederCannon3, 0); 
+               speederShot_b++;
+               fired_b = 0;
+            }
+          }
+          rndmSpeederSpacer_b = false;
+          rndmSpeederFlight_b = false;
+          rndmSpeederShot_b = false;
+          speeder1_b = false;      
+          speeder2_b = false;
+          speederShot_b = 0;          // Reset for new run
+        }else if (shootOrNot_b > 17){
+          rndmSpeederSpacer_b = false;
+          rndmSpeederFlight_b = false;
+          rndmSpeederShot_b = false;
+          speeder1_b = false;      
+          speeder2_b = false;
+        }
+      }
+    }
+    // END - Speeder flying and firing B
+
   }else if (paused == true) {           // If we are paused, go here.. 
     // do nothing..we are holding.. 
   }
-
-  // Get the pause state
+ 
+  // Set the pause state
   previousPause = paused;
 }
-
-
