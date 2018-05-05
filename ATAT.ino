@@ -1,5 +1,5 @@
   /* 
- *  AT-AT Gun'n'Walk V.14
+ *  AT-AT Gun'n'Walk V.15
  * 
  * Arduino Sketch for controlling lights and sounds in Hoth Diorama
  * by Ole Andre aka @oleshobbyblog www.oleandre.net
@@ -473,7 +473,7 @@ void loop() {
                                         // unless there is a power cycle.
 
       // Stereo Amplifier commands (I2C)
-      audioamp.enableChannel(true, false);           // Turn on the amplifier, both channels (I2C)
+      audioamp.enableChannel(true, true);           // Turn on the amplifier, both channels (I2C)
       audioamp.setGain(0);                          // Set the initial gain to 0. Must make a decision 
                                                     // to either use the amp or the wav trigger for volume adjustment
       //audioamp.setLimitLevelOn();                 // For testing
