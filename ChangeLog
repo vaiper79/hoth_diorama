@@ -6,6 +6,12 @@ Remaining Items:
 - Music mode..i.e. dialogue from the scene in the movie on top of the sounds, possibly turns he volume of the action down to hear the voice  of Luke.. See if I can get voice of Luke without other sounds..hmm..
 
 Done/Ignored/Fixed/Created/Removed/Tested (version numbers are internal for now):
+Version 16 (September 21st 2018)
+Milestone: This is the first test with electronics installed in diorama. Done, tested and working with this version: OLED, snowspeeders and internal base lighting.
+Fixed: Issue where the laser cannons on the speeders weren’t acting as expected. Issue was two-fold: Crossed wires and some quick’n’dirty coding that just did not do what it was supposed to. 
+Removed: Cleaned up some of the variables that weren’t being used
+Fixed: Sorted out some of the commenting that had gotten a bit off as changes were being made, especially with the removal of the cockpit lighting in the snowspeeders.
+
 Version 15 (May 5th 2018):
 Done: Enable the second audio channel to gain full stereo
 Done: Started testing on separate rig if 560 ohm is ok for explosion LED.
