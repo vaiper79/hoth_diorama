@@ -35,13 +35,15 @@
  * Parts list:
  *  1x IR Sensor: http://www.adafruit.com/products/157
  *  1x Remote control: http://www.adafruit.com/products/389
- *  1x WAV Trigger:
- *  1x Pro Trinket 5V:
- *  1x Stereo amplifier:
- *  2x Speakers:
- *  1x 128x32 i2c OLED: 
- *  LEDs: 
- *  Resistors and wires
+ *  1x WAV Trigger: https://www.sparkfun.com/products/13660
+ *  1x Pro Trinket 5V: https://www.adafruit.com/product/2000
+ *  1x Stereo amplifier: https://www.adafruit.com/product/1712
+ *  2x Speakers: Bought at a store in Japan, but seems similar to this https://www.sparkfun.com/products/9151
+ *  1x 128x32 i2c OLED: https://www.adafruit.com/product/931
+ *  LEDs: Various sizes, but all 5V from here: https://www.modeltrainsoftware.com/ and here (the wide, bright used in the explosion): https://www.ledsales.com.au/
+ *  Resistors: Just about any make..not sure where I got mine
+ *  Wiring: Regular size: https://www.adafruit.com/product/1311
+ *          Magnet "size" found here: https://www.modeltrainsoftware.com/ 
  */
 
 // Include some libraries we need :) 

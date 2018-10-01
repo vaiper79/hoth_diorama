@@ -6,6 +6,10 @@ Remaining Items:
 - Music mode..i.e. dialogue from the scene in the movie on top of the sounds, possibly turns he volume of the action down to hear the voice  of Luke.. See if I can get voice of Luke without other sounds..hmm..
 
 Done/Ignored/Fixed/Created/Removed/Tested (version numbers are internal for now):
+Version 17 (October 2nd 2018):
+Milestone: Diorama done. Any coding to be done is purely for added functionality, see remaining items.
+Fixed: Sorted out some missing items in the parts list. The list is still not exhaustive. Drop me a line if there are particulars I should have covered. 
+
 Version 16 (September 21st 2018)
 Milestone: This is the first test with electronics installed in diorama. Done, tested and working with this version: OLED, snowspeeders and internal base lighting.
 Fixed: Issue where the laser cannons on the speeders weren’t acting as expected. Issue was two-fold: Crossed wires and some quick’n’dirty coding that just did not do what it was supposed to. 
