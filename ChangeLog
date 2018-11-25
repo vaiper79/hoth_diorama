@@ -1,14 +1,22 @@
 Change Log
 
 Remaining Items:
-- Possibly create other versions of the HLC fire and Speeder blaster sounds for dynamic-ism
-- Consider a functionality where one can switch off elements.. Like isolate the ATAT or just the snow speeders.
-- Music mode..i.e. dialogue from the scene in the movie on top of the sounds, possibly turns he volume of the action down to hear the voice  of Luke.. See if I can get voice of Luke without other sounds..hmm..
+- Fine tune the display. 
+- Add display text and logo for each voice and its owner
+- Stress test, see if I can make it stutter and stop in weird conditions. 
 
 Done/Ignored/Fixed/Created/Removed/Tested (version numbers are internal for now):
-Version 17 (October 2nd 2018):
+Version 18 (November 25th 2018)
+Fixed: Nearly a complete rewrite. Ran into multiple issues, memory and space foremost. Then realized several features were added later on and early coded features did not anticipate the recent additions' impact.
+Added: Voices. Many quotes from the scene has been added and will play at random intervals, in order of appearance in the movie. 
+Added: Rebel logo to scroll screen. Star Wars logo is stored, but remains unused. See remaining items.
+
+Version 17 (November 5th 2018):
 Milestone: Diorama done. Any coding to be done is purely for added functionality, see remaining items.
 Fixed: Sorted out some missing items in the parts list. The list is still not exhaustive. Drop me a line if there are particulars I should have covered. 
+Added: Voices that run once or twice.
+Fixed: A bug where scrolling did not begin before some kind of user input.
+Fixed: A bug where AT-AT cockpit did not light back up after beig unpaused. 
 
 Version 16 (September 21st 2018)
 Milestone: This is the first test with electronics installed in diorama. Done, tested and working with this version: OLED, snowspeeders and internal base lighting.
