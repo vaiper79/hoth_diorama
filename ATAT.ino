@@ -544,7 +544,7 @@ void atat(){
   }
 
   wTrig.update();
-  if (wTrig.isTrackPlaying(explosion) == false && explosionStopping == false) {
+  if (wTrig.isTrackPlaying(explosion) == false && explosionDone == true) {
      explosionDone = true;
   }
 

@@ -6,6 +6,9 @@ Remaining Items:
 - Stress test, see if I can make it stutter and stop in weird conditions. 
 
 Done/Ignored/Fixed/Created/Removed/Tested (version numbers are internal for now):
+Version 18b (November 25th 2018)
+Fixed: Tiny bug affecting the exlposion state. It was never exited and thus no voices were allowed to start. 
+
 Version 18 (November 25th 2018)
 Fixed: Nearly a complete rewrite. Ran into multiple issues, memory and space foremost. Then realized several features were added later on and early coded features did not anticipate the recent additions' impact.
 Added: Voices. Many quotes from the scene has been added and will play at random intervals, in order of appearance in the movie. 
